@@ -2,12 +2,14 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-do
 import Home from './pages/Home'
 import Orders from './pages/Orders'
 import Customers from './pages/Customers'
+import Items from './pages/Items'
 
 function Navbar() {
   const location = useLocation()
   
   const links = [
     { path: '/', label: 'Home' },
+    { path: '/items', label: 'Menu' },
     { path: '/orders', label: 'Orders' },
     { path: '/customers', label: 'Customers' },
   ]
@@ -37,6 +39,7 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/items" element={<Items />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/customers" element={<Customers />} />
         </Routes>

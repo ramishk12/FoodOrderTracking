@@ -47,6 +47,15 @@ func main() {
 			customers.DELETE("/:id", handlers.DeleteCustomer)
 		}
 
+		items := api.Group("/items")
+		{
+			items.GET("", handlers.GetItems)
+			items.GET("/:id", handlers.GetItem)
+			items.POST("", handlers.CreateItem)
+			items.PUT("/:id", handlers.UpdateItem)
+			items.DELETE("/:id", handlers.DeleteItem)
+		}
+
 		orders := api.Group("/orders")
 		{
 			orders.GET("", handlers.GetOrders)

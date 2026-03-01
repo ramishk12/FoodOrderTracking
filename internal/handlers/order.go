@@ -12,7 +12,7 @@ import (
 
 func GetOrders(c *gin.Context) {
 	rows, err := database.DB.Query(`
-		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.items, o.notes, o.created_at, o.updated_at,
+		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.created_at, o.updated_at,
 		       COALESCE(c.name, ''), COALESCE(c.phone, '')
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
@@ -27,7 +27,7 @@ func GetOrders(c *gin.Context) {
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Items, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
 			orders = append(orders, o)
 		}
 	}
@@ -44,16 +44,37 @@ func GetOrder(c *gin.Context) {
 
 	var o models.Order
 	err = database.DB.QueryRow(`
-		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.items, o.notes, o.created_at, o.updated_at,
+		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.created_at, o.updated_at,
 		       COALESCE(c.name, ''), COALESCE(c.phone, '')
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
 		WHERE o.id = $1
-	`, id).Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Items, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone)
+	`, id).Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
+
+	itemRows, err := database.DB.Query(`
+		SELECT oi.id, oi.order_id, oi.item_id, COALESCE(i.name, ''), oi.quantity, oi.unit_price, oi.subtotal
+		FROM order_items oi
+		LEFT JOIN items i ON oi.item_id = i.id
+		WHERE oi.order_id = $1
+	`, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer itemRows.Close()
+
+	var orderItems []models.OrderItem
+	for itemRows.Next() {
+		var oi models.OrderItem
+		if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
+			orderItems = append(orderItems, oi)
+		}
+	}
+	o.OrderItems = orderItems
 
 	c.JSON(http.StatusOK, o)
 }
@@ -63,9 +84,11 @@ func CreateOrder(c *gin.Context) {
 		CustomerID      int     `json:"customer_id"`
 		DeliveryAddress string  `json:"delivery_address"`
 		Status          string  `json:"status"`
-		TotalAmount     float64 `json:"total_amount"`
-		Items           string  `json:"items"`
 		Notes           string  `json:"notes"`
+		Items           []struct {
+			ItemID   int `json:"item_id"`
+			Quantity int `json:"quantity"`
+		} `json:"items"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -76,18 +99,53 @@ func CreateOrder(c *gin.Context) {
 		input.Status = "pending"
 	}
 
-	var id int
-	err := database.DB.QueryRow(`
-		INSERT INTO orders (customer_id, delivery_address, status, total_amount, items, notes)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	var totalAmount float64
+	for _, item := range input.Items {
+		var price float64
+		err := tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&price)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item"})
+			return
+		}
+		totalAmount += price * float64(item.Quantity)
+	}
+
+	var orderID int
+	err = tx.QueryRow(`
+		INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
-	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Items, input.Notes).Scan(&id)
+	`, input.CustomerID, input.DeliveryAddress, input.Status, totalAmount, input.Notes).Scan(&orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"id": id, "status": input.Status})
+	for _, item := range input.Items {
+		var price float64
+		tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&price)
+		subtotal := price * float64(item.Quantity)
+
+		_, err = tx.Exec(`
+			INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal)
+			VALUES ($1, $2, $3, $4, $5)
+		`, orderID, item.ItemID, item.Quantity, price, subtotal)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	tx.Commit()
+
+	c.JSON(http.StatusCreated, gin.H{"id": orderID, "status": input.Status, "total_amount": totalAmount})
 }
 
 func UpdateOrder(c *gin.Context) {
@@ -102,7 +160,6 @@ func UpdateOrder(c *gin.Context) {
 		DeliveryAddress string  `json:"delivery_address"`
 		Status          string  `json:"status"`
 		TotalAmount     float64 `json:"total_amount"`
-		Items           string  `json:"items"`
 		Notes           string  `json:"notes"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -111,9 +168,9 @@ func UpdateOrder(c *gin.Context) {
 	}
 
 	_, err = database.DB.Exec(`
-		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, items = $5, notes = $6, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $7
-	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Items, input.Notes, id)
+		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, notes = $5, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $6
+	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Notes, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
