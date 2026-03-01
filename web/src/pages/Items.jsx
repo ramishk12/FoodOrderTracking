@@ -54,6 +54,15 @@ function Items() {
     return items.filter(item => quantities[item.id] > 0);
   };
 
+  const handleCustomerChange = (customerId) => {
+    const customer = customers.find(c => c.id === parseInt(customerId));
+    setOrderForm(prev => ({
+      ...prev,
+      customer_id: customerId,
+      delivery_address: customer?.address || prev.delivery_address
+    }));
+  };
+
   const handleCreateOrder = async (e) => {
     e.preventDefault();
     const selectedItems = getSelectedItems();
@@ -116,7 +125,7 @@ function Items() {
           <h3>Create Order</h3>
           <select
             value={orderForm.customer_id}
-            onChange={(e) => setOrderForm({ ...orderForm, customer_id: e.target.value })}
+            onChange={(e) => handleCustomerChange(e.target.value)}
           >
             <option value="">Select Customer</option>
             {customers.map(c => (
@@ -128,7 +137,6 @@ function Items() {
             placeholder="Delivery Address"
             value={orderForm.delivery_address}
             onChange={(e) => setOrderForm({ ...orderForm, delivery_address: e.target.value })}
-            required
           />
           <input
             type="text"
