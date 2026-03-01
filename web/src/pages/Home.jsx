@@ -11,6 +11,10 @@ function Home() {
           <h3>📦 Orders</h3>
           <p>View and manage all orders</p>
         </Link>
+        <Link to="/customers" className="home-card">
+          <h3>👥 Customers</h3>
+          <p>View and manage customers</p>
+        </Link>
       </div>
     </div>
   )
