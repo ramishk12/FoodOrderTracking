@@ -7,6 +7,10 @@ function Home() {
       <p>Track and manage your food delivery orders</p>
       
       <div className="home-links">
+        <Link to="/items" className="home-card">
+          <h3>🍕 Menu</h3>
+          <p>Browse and order menu items</p>
+        </Link>
         <Link to="/orders" className="home-card">
           <h3>📦 Orders</h3>
           <p>View and manage all orders</p>

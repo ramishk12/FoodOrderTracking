@@ -6,7 +6,7 @@ import (
 
 func Seed() error {
 	var count int
-	err := DB.QueryRow("SELECT COUNT(*) FROM customers").Scan(&count)
+	err := DB.QueryRow("SELECT COUNT(*) FROM items").Scan(&count)
 	if err != nil {
 		return err
 	}
@@ -22,11 +22,31 @@ func Seed() error {
 		`INSERT INTO customers (name, phone, email, address) VALUES ('Alice Brown', '555-3456', 'alice@example.com', '321 Elm St')`,
 		`INSERT INTO customers (name, phone, email, address) VALUES ('Charlie Davis', '555-7890', 'charlie@example.com', '654 Maple Ave')`,
 
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, items, notes) VALUES (1, '123 Main St', 'pending', 25.99, '2x Margherita Pizza, 1x Caesar Salad', 'Ring doorbell')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, items, notes) VALUES (2, '456 Oak Ave', 'preparing', 18.50, '1x Classic Burger, 1x French Fries', '')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, items, notes) VALUES (3, '789 Pine Rd', 'delivered', 32.00, '3x Salmon Roll, 1x Miso Soup', 'Leave at door')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, items, notes) VALUES (4, '321 Elm St', 'ready', 15.99, '1x Pepperoni Pizza', '')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, items, notes) VALUES (5, '654 Maple Ave', 'cancelled', 0, '', 'Customer requested cancellation')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Margherita Pizza', 'Classic tomato and mozzarella', 12.99, 'Pizza')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Pepperoni Pizza', 'Tomato, mozzarella, pepperoni', 14.99, 'Pizza')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Caesar Salad', 'Romaine, parmesan, croutons', 8.99, 'Salad')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Classic Burger', 'Beef patty, lettuce, tomato', 10.99, 'Burgers')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Chicken Sandwich', 'Grilled chicken, mayo', 9.99, 'Sandwiches')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('French Fries', 'Crispy golden fries', 4.99, 'Sides')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Salmon Roll', 'Fresh salmon, rice, nori', 15.99, 'Rolls')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Tuna Roll', 'Fresh tuna, avocado', 14.99, 'Rolls')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Miso Soup', 'Traditional Japanese soup', 3.99, 'Soup')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Cola', 'Classic cola drink', 2.49, 'Drinks')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Orange Juice', 'Fresh orange juice', 3.49, 'Drinks')`,
+		`INSERT INTO items (name, description, price, category) VALUES ('Water', 'Bottled water', 1.99, 'Drinks')`,
+
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes) VALUES (1, '123 Main St', 'pending', 25.99, 'Ring doorbell')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes) VALUES (2, '456 Oak Ave', 'preparing', 18.50, '')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes) VALUES (3, '789 Pine Rd', 'delivered', 32.00, 'Leave at door')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes) VALUES (4, '321 Elm St', 'ready', 15.99, '')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes) VALUES (5, '654 Maple Ave', 'cancelled', 0, 'Customer requested cancellation')`,
+
+		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (1, 1, 2, 12.99, 25.98)`,
+		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (2, 4, 1, 10.99, 10.99)`,
+		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (2, 6, 1, 4.99, 4.99)`,
+		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (2, 10, 1, 2.49, 2.49)`,
+		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (3, 7, 3, 15.99, 47.97)`,
+		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (4, 2, 1, 14.99, 14.99)`,
 	}
 
 	for _, s := range seed {
