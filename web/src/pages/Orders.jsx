@@ -94,6 +94,15 @@ function Orders() {
     setFormData({ customer_id: '', delivery_address: '', total_amount: '', items: '', notes: '' });
   };
 
+  const handleCustomerChange = (customerId) => {
+    const customer = customers.find(c => c.id === parseInt(customerId));
+    setFormData(prev => ({
+      ...prev,
+      customer_id: customerId,
+      delivery_address: customer?.address || prev.delivery_address
+    }));
+  };
+
   const handleDelete = async (id) => {
     if (!confirm('Delete this order?')) return;
     try {
@@ -129,7 +138,7 @@ function Orders() {
           <h3>{editingId ? 'Edit Order' : 'New Order'}</h3>
           <select
             value={formData.customer_id}
-            onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
+            onChange={(e) => handleCustomerChange(e.target.value)}
           >
             <option value="">Select Customer</option>
             {customers.map(c => (
@@ -176,7 +185,6 @@ function Orders() {
             placeholder="Delivery Address"
             value={formData.delivery_address}
             onChange={(e) => setFormData({ ...formData, delivery_address: e.target.value })}
-            required
           />
           <input
             type="number"
