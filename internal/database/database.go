@@ -34,7 +34,7 @@ func Connect(cfg Config) error {
 		return err
 	}
 
-	_, err = DB.Exec("SET timezone = 'America/Los_Angeles'")
+	_, err = DB.Exec("SET timezone = 'UTC'")
 	if err != nil {
 		return err
 	}
