@@ -34,6 +34,11 @@ func Connect(cfg Config) error {
 		return err
 	}
 
+	_, err = DB.Exec("SET timezone = 'America/Los_Angeles'")
+	if err != nil {
+		return err
+	}
+
 	log.Println("Connected to PostgreSQL")
 	return nil
 }
