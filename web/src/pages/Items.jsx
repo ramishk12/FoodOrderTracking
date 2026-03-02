@@ -8,10 +8,18 @@ function Items() {
   const [quantities, setQuantities] = useState({});
   const [customers, setCustomers] = useState([]);
   const [showOrderForm, setShowOrderForm] = useState(false);
+  const [showItemForm, setShowItemForm] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [orderForm, setOrderForm] = useState({
     customer_id: '',
     delivery_address: '',
     notes: ''
+  });
+  const [itemForm, setItemForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+    category: ''
   });
 
   useEffect(() => {
@@ -96,6 +104,58 @@ function Items() {
     }
   };
 
+  const handleItemSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingItem) {
+        await api.updateItem(editingItem.id, {
+          ...itemForm,
+          price: parseFloat(itemForm.price),
+          available: true
+        });
+      } else {
+        await api.createItem({
+          ...itemForm,
+          price: parseFloat(itemForm.price),
+          available: true
+        });
+      }
+      setShowItemForm(false);
+      setEditingItem(null);
+      setItemForm({ name: '', description: '', price: '', category: '' });
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleEditItem = (item) => {
+    setItemForm({
+      name: item.name,
+      description: item.description || '',
+      price: String(item.price),
+      category: item.category || ''
+    });
+    setEditingItem(item);
+    setShowItemForm(true);
+  };
+
+  const handleDeleteItem = async (id) => {
+    if (!confirm('Delete this item?')) return;
+    try {
+      await api.deleteItem(id);
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleCancelItem = () => {
+    setShowItemForm(false);
+    setEditingItem(null);
+    setItemForm({ name: '', description: '', price: '', category: '' });
+  };
+
   const groupedItems = items.reduce((acc, item) => {
     if (!acc[item.category]) {
       acc[item.category] = [];
@@ -111,14 +171,66 @@ function Items() {
     <div className="page">
       <div className="page-header">
         <h1>Menu Items</h1>
-        <button 
-          className="btn-primary" 
-          onClick={() => setShowOrderForm(!showOrderForm)}
-          disabled={getTotalAmount() === 0}
-        >
-          {showOrderForm ? 'Cancel' : `Order ($${getTotalAmount().toFixed(2)})`}
-        </button>
+        <div className="header-buttons">
+          <button 
+            className="btn-secondary"
+            onClick={() => setShowItemForm(!showItemForm)}
+          >
+            {showItemForm ? 'Cancel' : '+ Add Item'}
+          </button>
+          <button 
+            className="btn-primary" 
+            onClick={() => setShowOrderForm(!showOrderForm)}
+            disabled={getTotalAmount() === 0}
+          >
+            {showOrderForm ? 'Cancel' : `Order ($${getTotalAmount().toFixed(2)})`}
+          </button>
+        </div>
       </div>
+
+      {showItemForm && (
+        <form onSubmit={handleItemSubmit} className="form">
+          <h3>{editingItem ? 'Edit Item' : 'Add New Item'}</h3>
+          <input
+            type="text"
+            placeholder="Item Name"
+            value={itemForm.name}
+            onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+            required
+          />
+          <input
+            type="text"
+            placeholder="Description"
+            value={itemForm.description}
+            onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+          />
+          <input
+            type="number"
+            placeholder="Price"
+            step="0.01"
+            value={itemForm.price}
+            onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
+            required
+          />
+          <input
+            type="text"
+            placeholder="Category"
+            value={itemForm.category}
+            onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
+            required
+          />
+          <div className="form-actions">
+            <button type="submit" className="btn-primary">
+              {editingItem ? 'Update Item' : 'Add Item'}
+            </button>
+            {editingItem && (
+              <button type="button" className="btn-secondary" onClick={handleCancelItem}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      )}
 
       {showOrderForm && (
         <form onSubmit={handleCreateOrder} className="form">
@@ -190,6 +302,10 @@ function Items() {
                   >
                     +
                   </button>
+                </div>
+                <div className="card-actions">
+                  <button className="btn-primary" onClick={() => handleEditItem(item)}>Edit</button>
+                  <button className="btn-danger" onClick={() => handleDeleteItem(item.id)}>Delete</button>
                 </div>
               </div>
             ))}

@@ -64,6 +64,11 @@ body {
   margin-bottom: 1.5rem;
 }
 
+.header-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
