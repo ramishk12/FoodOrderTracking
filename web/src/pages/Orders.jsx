@@ -9,6 +9,8 @@ function Orders() {
   const [showForm, setShowForm] = useState(false);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [formData, setFormData] = useState({
     customer_id: '',
     delivery_address: '',
@@ -121,6 +123,14 @@ function Orders() {
     cancelled: '#ef4444',
   };
 
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = !searchTerm || 
+      order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.delivery_address?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = !statusFilter || order.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
   if (loading) return <div className="loading">Loading orders...</div>;
   if (error) return <div className="error">Error: {error}</div>;
 
@@ -131,6 +141,28 @@ function Orders() {
         <button className="btn-primary" onClick={() => showForm ? handleCancel() : setShowForm(true)}>
           {showForm ? 'Cancel' : 'New Order'}
         </button>
+      </div>
+
+      <div className="filters">
+        <input
+          type="text"
+          placeholder="Search by customer or address..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="filter-select"
+        >
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="preparing">Preparing</option>
+          <option value="ready">Ready</option>
+          <option value="delivered">Delivered</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
       </div>
 
       {showForm && (
@@ -215,7 +247,7 @@ function Orders() {
       )}
 
       <div className="card-grid">
-        {orders.map((order) => (
+        {filteredOrders.map((order) => (
           <div key={order.id} className="card">
             <div className="card-header">
               <span className="order-id">Order #{order.id}</span>
