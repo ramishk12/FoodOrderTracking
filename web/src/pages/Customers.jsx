@@ -7,6 +7,7 @@ function Customers() {
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -74,6 +75,14 @@ function Customers() {
     setFormData({ name: '', phone: '', email: '', address: '' });
   };
 
+  const filteredCustomers = customers.filter(customer => {
+    const search = searchTerm.toLowerCase();
+    return !searchTerm || 
+      customer.name?.toLowerCase().includes(search) ||
+      customer.email?.toLowerCase().includes(search) ||
+      customer.phone?.toLowerCase().includes(search);
+  });
+
   if (loading) return <div className="loading">Loading customers...</div>;
   if (error) return <div className="error">Error: {error}</div>;
 
@@ -84,6 +93,16 @@ function Customers() {
         <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Cancel' : 'Add Customer'}
         </button>
+      </div>
+
+      <div className="filters">
+        <input
+          type="text"
+          placeholder="Search by name, email, or phone..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
       </div>
 
       {showForm && (
@@ -128,7 +147,7 @@ function Customers() {
       )}
 
       <div className="card-grid">
-        {customers.map((customer) => (
+        {filteredCustomers.map((customer) => (
           <div key={customer.id} className="card">
             <div className="card-header">
               <h3>{customer.name}</h3>

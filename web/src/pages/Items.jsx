@@ -10,6 +10,8 @@ function Items() {
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [orderForm, setOrderForm] = useState({
     customer_id: '',
     delivery_address: '',
@@ -156,13 +158,24 @@ function Items() {
     setItemForm({ name: '', description: '', price: '', category: '' });
   };
 
-  const groupedItems = items.reduce((acc, item) => {
+  const filteredItems = items.filter(item => {
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = !searchTerm || 
+      item.name?.toLowerCase().includes(search) ||
+      item.description?.toLowerCase().includes(search);
+    const matchesCategory = !categoryFilter || item.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+
+  const groupedItems = filteredItems.reduce((acc, item) => {
     if (!acc[item.category]) {
       acc[item.category] = [];
     }
     acc[item.category].push(item);
     return acc;
   }, {});
+
+  const categories = [...new Set(items.map(item => item.category))];
 
   if (loading) return <div className="loading">Loading items...</div>;
   if (error) return <div className="error">Error: {error}</div>;
@@ -186,6 +199,26 @@ function Items() {
             {showOrderForm ? 'Cancel' : `Order ($${getTotalAmount().toFixed(2)})`}
           </button>
         </div>
+      </div>
+
+      <div className="filters">
+        <input
+          type="text"
+          placeholder="Search items..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="filter-select"
+        >
+          <option value="">All Categories</option>
+          {categories.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
       </div>
 
       {showItemForm && (
