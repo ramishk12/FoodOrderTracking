@@ -138,7 +138,7 @@ function Customers() {
               <p><strong>Phone:</strong> {customer.phone || 'N/A'}</p>
               <p><strong>Email:</strong> {customer.email || 'N/A'}</p>
               <p><strong>Address:</strong> {customer.address || 'N/A'}</p>
-              <p><strong>Created:</strong> {new Date(customer.created_at).toLocaleDateString()}</p>
+              <p><strong>Created:</strong> {new Date(customer.created_at).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
             </div>
             <div className="card-actions">
               <button className="btn-primary" onClick={() => handleEdit(customer)}>Edit</button>

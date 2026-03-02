@@ -225,7 +225,10 @@ function Orders() {
               <p><strong>Items:</strong> {order.items || 'N/A'}</p>
               <p><strong>Total:</strong> ${order.total_amount}</p>
               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
-              <p><strong>Date:</strong> {new Date(order.created_at).toLocaleString()}</p>
+              <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+              {order.updated_at && order.updated_at !== order.created_at && (
+                <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+              )}
             </div>
             <div className="card-actions">
               <button className="btn-primary" onClick={() => handleEdit(order)}>Edit</button>
