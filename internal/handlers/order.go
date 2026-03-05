@@ -67,6 +67,8 @@ func GetOrders(c *gin.Context) {
 			orders[i].Items = strings.Join(items, ", ")
 		}
 		orders[i].OrderItems = orderItems
+
+		log.Printf("Order %d: Items: %s\n", i, orders[i].Items)
 	}
 
 	c.JSON(http.StatusOK, orders)
@@ -118,10 +120,10 @@ func GetOrder(c *gin.Context) {
 
 func CreateOrder(c *gin.Context) {
 	var input struct {
-		CustomerID      int     `json:"customer_id"`
-		DeliveryAddress string  `json:"delivery_address"`
-		Status          string  `json:"status"`
-		Notes           string  `json:"notes"`
+		CustomerID      int    `json:"customer_id"`
+		DeliveryAddress string `json:"delivery_address"`
+		Status          string `json:"status"`
+		Notes           string `json:"notes"`
 		Items           []struct {
 			ItemID   int `json:"item_id"`
 			Quantity int `json:"quantity"`

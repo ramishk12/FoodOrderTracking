@@ -265,10 +265,10 @@ function Orders() {
               <p><strong>Address:</strong> {order.delivery_address}</p>
               <div className="order-items-list">
                 <strong>Items:</strong>
-                {order.items ? (
+                {order.order_items && order.order_items.length > 0 ? (
                   <ul>
-                    {order.items.split(', ').map((item, index) => (
-                      <li key={index}>{item}</li>
+                    {order.order_items.map((item, index) => (
+                      <li key={index}>{item.quantity}x {item.item_name}</li>
                     ))}
                   </ul>
                 ) : (
