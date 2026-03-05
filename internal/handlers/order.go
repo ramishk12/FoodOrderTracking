@@ -161,13 +161,25 @@ func UpdateOrder(c *gin.Context) {
 		Status          string  `json:"status"`
 		TotalAmount     float64 `json:"total_amount"`
 		Notes           string  `json:"notes"`
+		Items           []struct {
+			ItemID   int `json:"item_id"`
+			Quantity int `json:"quantity"`
+		} `json:"items"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	_, err = database.DB.Exec(`
+	tx, err := database.DB.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	// Update order details
+	_, err = tx.Exec(`
 		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, notes = $5, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $6
 	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Notes, id)
@@ -175,6 +187,37 @@ func UpdateOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// If items provided, update order_items
+	if len(input.Items) > 0 {
+		// Delete existing order items
+		_, err = tx.Exec("DELETE FROM order_items WHERE order_id = $1", id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Insert new order items
+		for _, item := range input.Items {
+			if item.Quantity <= 0 {
+				continue
+			}
+			var unitPrice float64
+			tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&unitPrice)
+			subtotal := unitPrice * float64(item.Quantity)
+
+			_, err = tx.Exec(`
+				INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal)
+				VALUES ($1, $2, $3, $4, $5)
+			`, id, item.ItemID, item.Quantity, unitPrice, subtotal)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+
+	tx.Commit()
 
 	c.JSON(http.StatusOK, gin.H{"message": "Order updated"})
 }
