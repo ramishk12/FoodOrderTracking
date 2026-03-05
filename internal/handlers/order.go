@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,15 +44,21 @@ func GetOrders(c *gin.Context) {
 			WHERE oi.order_id = $1
 		`, orders[i].ID)
 		if err != nil {
+			log.Printf("Error fetching items for order %d: %v", orders[i].ID, err)
 			continue
 		}
 
 		var items []string
+		var orderItems []models.OrderItem
 		for itemRows.Next() {
 			var qty int
 			var name string
 			if err := itemRows.Scan(&qty, &name); err == nil {
 				items = append(items, fmt.Sprintf("%dx %s", qty, name))
+				orderItems = append(orderItems, models.OrderItem{
+					Quantity: qty,
+					ItemName: name,
+				})
 			}
 		}
 		itemRows.Close()
@@ -59,6 +66,7 @@ func GetOrders(c *gin.Context) {
 		if len(items) > 0 {
 			orders[i].Items = strings.Join(items, ", ")
 		}
+		orders[i].OrderItems = orderItems
 	}
 
 	c.JSON(http.StatusOK, orders)
