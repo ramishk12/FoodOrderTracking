@@ -263,7 +263,18 @@ function Orders() {
               <p><strong>Customer:</strong> {order.customer_name || 'No Customer'}</p>
               <p><strong>Phone:</strong> {order.customer_phone || 'N/A'}</p>
               <p><strong>Address:</strong> {order.delivery_address}</p>
-              <p><strong>Items:</strong> {order.items || 'N/A'}</p>
+              <div className="order-items-list">
+                <strong>Items:</strong>
+                {order.items ? (
+                  <ul>
+                    {order.items.split(', ').map((item, index) => (
+                      <li key={index}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="no-items">No items</span>
+                )}
+              </div>
               <p><strong>Total:</strong> ${order.total_amount}</p>
               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
               <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
