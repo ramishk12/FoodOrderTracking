@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Home from './pages/Home'
 import Orders from './pages/Orders'
+import OrderEdit from './pages/OrderEdit'
 import Customers from './pages/Customers'
 import Items from './pages/Items'
 
@@ -41,6 +42,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/items" element={<Items />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/orders/:id/edit" element={<OrderEdit />} />
           <Route path="/customers" element={<Customers />} />
         </Routes>
       </main>
