@@ -50,15 +50,11 @@ func GetOrders(c *gin.Context) {
 		for itemRows.Next() {
 			var oi models.OrderItem
 			if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
-				log.Printf("Found item: %+v", oi)
 				orderItems = append(orderItems, oi)
-			} else {
-				log.Printf("Error scanning item: %v", err)
 			}
 		}
 		itemRows.Close()
-		
-		log.Printf("Order %d has %d items", orders[i].ID, len(orderItems))
+
 		orders[i].OrderItems = orderItems
 	}
 
