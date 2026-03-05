@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 
 function Orders() {
@@ -271,7 +272,7 @@ function Orders() {
               )}
             </div>
             <div className="card-actions">
-              <button className="btn-primary" onClick={() => handleEdit(order)}>Edit</button>
+              <Link to={`/orders/${order.id}/edit`} className="btn-primary">Edit</Link>
               <select
                 value={order.status}
                 onChange={async (e) => {
