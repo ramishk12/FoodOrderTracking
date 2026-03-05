@@ -5,6 +5,11 @@ import OrderEdit from './pages/OrderEdit'
 import Customers from './pages/Customers'
 import Items from './pages/Items'
 
+function OrderEditWrapper() {
+  const location = useLocation()
+  return <OrderEdit key={location.pathname} />
+}
+
 function Navbar() {
   const location = useLocation()
   
@@ -42,7 +47,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/items" element={<Items />} />
           <Route path="/orders" element={<Orders />} />
-          <Route path="/orders/:id/edit" element={<OrderEdit />} />
+          <Route path="/orders/:id/edit" element={<OrderEditWrapper />} />
           <Route path="/customers" element={<Customers />} />
         </Routes>
       </main>

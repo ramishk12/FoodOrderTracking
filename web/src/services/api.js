@@ -4,6 +4,7 @@ async function request(endpoint, options = {}) {
   const config = {
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
       ...options.headers,
     },
     ...options,
@@ -13,7 +14,12 @@ async function request(endpoint, options = {}) {
     config.body = JSON.stringify(config.body);
   }
 
-  const response = await fetch(`${API_BASE}${endpoint}`, config);
+  const method = config.method || 'GET';
+  const url = method === 'GET' 
+    ? `${API_BASE}${endpoint}?t=${Date.now()}` 
+    : `${API_BASE}${endpoint}`;
+  
+  const response = await fetch(url, config);
   
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }));

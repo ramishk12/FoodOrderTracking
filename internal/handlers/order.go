@@ -229,7 +229,11 @@ func UpdateOrder(c *gin.Context) {
 				continue
 			}
 			var unitPrice float64
-			tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&unitPrice)
+			err = tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&unitPrice)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item ID: " + strconv.Itoa(item.ItemID)})
+				return
+			}
 			subtotal := unitPrice * float64(item.Quantity)
 
 			_, err = tx.Exec(`
