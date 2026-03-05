@@ -16,7 +16,6 @@ function Orders() {
     customer_id: '',
     delivery_address: '',
     total_amount: '',
-    items: '',
     notes: ''
   });
   const [customerData, setCustomerData] = useState({
@@ -83,7 +82,6 @@ function Orders() {
       customer_id: order.customer_id ? String(order.customer_id) : '',
       delivery_address: order.delivery_address || '',
       total_amount: String(order.total_amount) || '',
-      items: order.items || '',
       notes: order.notes || ''
     });
     setEditingId(order.id);
@@ -94,7 +92,7 @@ function Orders() {
     setShowForm(false);
     setEditingId(null);
     setShowCustomerForm(false);
-    setFormData({ customer_id: '', delivery_address: '', total_amount: '', items: '', notes: '' });
+    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '' });
   };
 
   const handleCustomerChange = (customerId) => {
@@ -226,12 +224,6 @@ function Orders() {
             value={formData.total_amount}
             onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
             required
-          />
-          <input
-            type="text"
-            placeholder="Items (e.g., 2x Pizza)"
-            value={formData.items}
-            onChange={(e) => setFormData({ ...formData, items: e.target.value })}
           />
           <input
             type="text"

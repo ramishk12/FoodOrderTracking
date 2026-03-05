@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/models"
@@ -38,7 +36,7 @@ func GetOrders(c *gin.Context) {
 	// Get order items for each order
 	for i := range orders {
 		itemRows, err := database.DB.Query(`
-			SELECT oi.quantity, i.name
+			SELECT oi.id, oi.order_id, oi.item_id, i.name, oi.quantity, oi.unit_price, oi.subtotal
 			FROM order_items oi
 			JOIN items i ON oi.item_id = i.id
 			WHERE oi.order_id = $1
@@ -48,27 +46,16 @@ func GetOrders(c *gin.Context) {
 			continue
 		}
 
-		var items []string
 		var orderItems []models.OrderItem
 		for itemRows.Next() {
-			var qty int
-			var name string
-			if err := itemRows.Scan(&qty, &name); err == nil {
-				items = append(items, fmt.Sprintf("%dx %s", qty, name))
-				orderItems = append(orderItems, models.OrderItem{
-					Quantity: qty,
-					ItemName: name,
-				})
+			var oi models.OrderItem
+			if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
+				orderItems = append(orderItems, oi)
 			}
 		}
 		itemRows.Close()
 
-		if len(items) > 0 {
-			orders[i].Items = strings.Join(items, ", ")
-		}
 		orders[i].OrderItems = orderItems
-
-		log.Printf("Order %d: Items: %s\n", i, orders[i].Items)
 	}
 
 	c.JSON(http.StatusOK, orders)
