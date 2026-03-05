@@ -280,7 +280,13 @@ function Orders() {
                 value={order.status}
                 onChange={async (e) => {
                   try {
-                    await api.updateOrder(order.id, { ...order, status: e.target.value });
+                    await api.updateOrder(order.id, {
+                      customer_id: order.customer_id,
+                      delivery_address: order.delivery_address,
+                      status: e.target.value,
+                      total_amount: order.total_amount,
+                      notes: order.notes
+                    });
                     loadData();
                   } catch (err) {
                     alert(err.message);
