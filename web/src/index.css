@@ -610,3 +610,31 @@ body {
   border-radius: 4px;
   font-size: 1rem;
 }
+
+/* Order Items List on Orders Page */
+.order-items-list {
+  margin: 0.5rem 0;
+}
+
+.order-items-list strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.order-items-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.order-items-list li {
+  padding: 0.25rem 0;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.order-items-list li::before {
+  content: "•";
+  color: #3b82f6;
+  margin-right: 0.5rem;
+}
