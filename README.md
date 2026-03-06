@@ -44,38 +44,56 @@ FoodOrderTracking/
 
 ## Getting Started
 
-### Prerequisites
+### Quick Start with Docker (Recommended - 5 minutes)
 
+**Prerequisites**: Docker Desktop for Windows
+
+1. Start the application:
+   ```bash
+   cd F:\Development\FoodOrderTracking
+   docker-compose up -d
+   ```
+
+2. Access the application:
+   - Frontend: http://localhost
+   - API: http://localhost:8080/api
+
+3. View logs:
+   ```bash
+   docker-compose logs -f
+   ```
+
+For detailed instructions, see [QUICK_START.md](QUICK_START.md)
+
+### Traditional Setup (Local Development)
+
+**Prerequisites**
 - Go 1.21+
 - Node.js 18+
 - PostgreSQL 14+
 
-### 1. Set Up PostgreSQL
+**Setup Steps**
 
-```sql
--- Create database
-CREATE DATABASE food_order_tracking;
-```
+1. Set Up PostgreSQL
+   ```sql
+   CREATE DATABASE food_order_tracking;
+   ```
 
-### 2. Run Backend
+2. Run Backend
+   ```powershell
+   cd F:\Development\FoodOrderTracking
+   go mod tidy
+   go run cmd/main.go
+   ```
+   Server runs on `http://localhost:8080`
 
-```powershell
-cd F:\Development\FoodOrderTracking
-go mod tidy
-go run cmd/main.go
-```
-
-The server runs on `http://localhost:8080`
-
-### 3. Run Frontend
-
-```powershell
-cd F:\Development\FoodOrderTracking\web
-npm install
-npm run dev
-```
-
-The app runs on `http://localhost:3000`
+3. Run Frontend
+   ```powershell
+   cd F:\Development\FoodOrderTracking\web
+   npm install
+   npm run dev
+   ```
+   App runs on `http://localhost:3000`
 
 ## Database Schema
 
@@ -170,8 +188,24 @@ The app runs on `http://localhost:3000`
 - **Menu Items Page**: Manage menu items; add, edit, delete items; set availability by category
 - **Search/Filter**: Search orders by customer name; filter orders by status
 
+## Docker Deployment
+
+Complete Docker setup for local deployment with PostgreSQL, Go backend, and React frontend.
+
+### Files Included
+- `Dockerfile.backend` - Multi-stage build for Go backend
+- `Dockerfile.frontend` - Multi-stage build for React frontend with Nginx
+- `docker-compose.yml` - Services orchestration
+- `nginx.conf` - Nginx configuration
+- `QUICK_START.md` - Quick start guide
+- `DOCKER_DEPLOYMENT.md` - Full deployment documentation
+
+See [QUICK_START.md](QUICK_START.md) for details.
+
 ## Recent Updates
 
+- Added collapsible sections by order status on Orders page (Issue #53)
+- Implemented Docker deployment for easy local setup
 - Added menu items management with categories and availability
 - Added order edit page with item quantity management
 - Added search and filter functionality on orders page
