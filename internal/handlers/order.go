@@ -92,7 +92,7 @@ func GetScheduledOrders(c *gin.Context) {
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.PaymentMethod, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
 			orders = append(orders, o)
 		}
 	}
@@ -152,7 +152,7 @@ func GetOrdersByCustomer(c *gin.Context) {
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.PaymentMethod, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
 			orders = append(orders, o)
 		}
 	}
@@ -201,7 +201,7 @@ func GetOrder(c *gin.Context) {
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
 		WHERE o.id = $1
-	`, id).Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone)
+	`, id).Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.PaymentMethod, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
@@ -334,6 +334,10 @@ func UpdateOrder(c *gin.Context) {
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	if input.PaymentMethod == "" {
+		input.PaymentMethod = "cash"
 	}
 
 	tx, err := database.DB.Begin()

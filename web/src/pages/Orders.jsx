@@ -197,18 +197,15 @@ function Orders() {
                   <span className="no-items">No items</span>
                 )}
               </div>
-              <p><strong>Total:</strong> ${order.total_amount}</p>
+               <p><strong>Total:</strong> ${order.total_amount}</p>
                <p><strong>Payment Method:</strong> {order.payment_method === 'e-transfer' ? 'e-Transfer' : 'Cash'}</p>
-              {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
-              {order.scheduled_date && (
-                <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
-              )}
-              {order.scheduled_date && (
-                <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
-              )}
+               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
+               {order.scheduled_date && (
+                 <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+               )}
               <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               {order.updated_at && order.updated_at !== order.created_at && (
-                <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+              <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               )}
             </div>
             <div className="card-actions">
@@ -223,7 +220,7 @@ function Orders() {
                       status: e.target.value,
                       total_amount: order.total_amount,
                       notes: order.notes,
-                       payment_method: order.payment_method
+                      payment_method: order.payment_method
                     });
                     loadData();
                   } catch (err) {

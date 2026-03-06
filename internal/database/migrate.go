@@ -70,6 +70,7 @@ func Migrate() error {
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP WITH TIME ZONE`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`,
 		`ALTER TABLE orders ALTER COLUMN scheduled_date TYPE TIMESTAMP WITH TIME ZONE`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`,
 	}
 
 	for _, migration := range migrations {
