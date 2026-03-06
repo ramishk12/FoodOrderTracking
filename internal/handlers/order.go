@@ -271,11 +271,15 @@ func CreateOrder(c *gin.Context) {
 	}
 
 	var orderID int
+	scheduledDateUTC := input.ScheduledDate
+	if scheduledDateUTC != nil {
+		*scheduledDateUTC = scheduledDateUTC.UTC()
+	}
 	err = tx.QueryRow(`
 		INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, scheduled_date)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
-	`, input.CustomerID, input.DeliveryAddress, input.Status, totalAmount, input.Notes, input.ScheduledDate).Scan(&orderID)
+	`, input.CustomerID, input.DeliveryAddress, input.Status, totalAmount, input.Notes, scheduledDateUTC).Scan(&orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -333,10 +337,14 @@ func UpdateOrder(c *gin.Context) {
 	defer tx.Rollback()
 
 	// Update order details
+	scheduledDateUTC := input.ScheduledDate
+	if scheduledDateUTC != nil {
+		*scheduledDateUTC = scheduledDateUTC.UTC()
+	}
 	_, err = tx.Exec(`
 		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, notes = $5, scheduled_date = $6, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $7
-	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Notes, input.ScheduledDate, id)
+	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Notes, scheduledDateUTC, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
