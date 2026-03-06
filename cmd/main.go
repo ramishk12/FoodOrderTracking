@@ -60,9 +60,9 @@ func main() {
 		{
 			orders.GET("", handlers.GetOrders)
 			orders.GET("/scheduled", handlers.GetScheduledOrders)
+			orders.POST("", handlers.CreateOrder)
 			orders.GET("/customer/:customerId", handlers.GetOrdersByCustomer)
 			orders.GET("/:id", handlers.GetOrder)
-			orders.POST("", handlers.CreateOrder)
 			orders.PUT("/:id", handlers.UpdateOrder)
 			orders.DELETE("/:id", handlers.DeleteOrder)
 		}
