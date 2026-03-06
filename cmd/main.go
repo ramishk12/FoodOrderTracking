@@ -65,6 +65,8 @@ func main() {
 			orders.PUT("/:id", handlers.UpdateOrder)
 			orders.DELETE("/:id", handlers.DeleteOrder)
 		}
+
+		api.GET("/dashboard", handlers.GetDashboardStats)
 	}
 
 	log.Println("Server starting on :8080")

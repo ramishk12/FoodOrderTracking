@@ -51,7 +51,8 @@ function Orders() {
       const data = {
         ...formData,
         customer_id: parseInt(formData.customer_id) || null,
-        total_amount: parseFloat(formData.total_amount)
+        total_amount: parseFloat(formData.total_amount),
+        status: 'pending'
       };
       if (editingId) {
         await api.updateOrder(editingId, data);

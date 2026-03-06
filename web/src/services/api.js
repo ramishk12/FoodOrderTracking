@@ -48,4 +48,6 @@ export const api = {
   createOrder: (data) => request('/orders', { method: 'POST', body: data }),
   updateOrder: (id, data) => request(`/orders/${id}`, { method: 'PUT', body: data }),
   deleteOrder: (id) => request(`/orders/${id}`, { method: 'DELETE' }),
+
+  getDashboardStats: () => request('/dashboard'),
 };
