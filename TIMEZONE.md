@@ -11,13 +11,14 @@ All timestamps in the application are stored and processed in **UTC (Coordinated
 ### Column Definition
 The `scheduled_date` column in the `orders` table is defined as:
 ```sql
-scheduled_date TIMESTAMP WITH TIME ZONE
+scheduled_date TIMESTAMP
 ```
 
-Using `TIMESTAMP WITH TIME ZONE` (also known as `TIMESTAMPTZ`) ensures that:
-- Timezone information is explicitly stored with the timestamp
-- PostgreSQL automatically converts to UTC for storage
-- PostgreSQL handles timezone-aware operations correctly
+Using `TIMESTAMP` (without timezone) ensures that:
+- All times are stored in UTC format without timezone offset
+- Consistent storage format: `2026-03-06 21:19:40.268226`
+- No timezone offset information is stored with the timestamp
+- The application always treats stored times as UTC
 
 ### Default Timezone
 All system timestamps use UTC:
