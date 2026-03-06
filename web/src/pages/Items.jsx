@@ -18,6 +18,7 @@ function Items() {
     customer_id: '',
     delivery_address: '',
     notes: '',
+    payment_method: 'cash',
     scheduled_date: ''
   });
   const [itemForm, setItemForm] = useState({
@@ -117,6 +118,7 @@ function Items() {
         customer_id: parseInt(orderForm.customer_id) || null,
         delivery_address: orderForm.delivery_address,
         notes: orderForm.notes,
+        payment_method: orderForm.payment_method,
         scheduled_date: scheduledDateISO,
         items: orderItems
       });
@@ -127,7 +129,7 @@ function Items() {
         Object.keys(reset).forEach(key => reset[key] = 0);
         return reset;
       });
-      setOrderForm({ customer_id: '', delivery_address: '', notes: '', scheduled_date: '' });
+      setOrderForm({ customer_id: '', delivery_address: '', notes: '', payment_method: 'cash', scheduled_date: '' });
     } catch (err) {
       alert(err.message);
     }
@@ -316,6 +318,13 @@ function Items() {
             value={orderForm.notes}
             onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
           />
+          <select
+            value={orderForm.payment_method}
+            onChange={(e) => setOrderForm({ ...orderForm, payment_method: e.target.value })}
+          >
+            <option value="cash">Cash</option>
+            <option value="e-transfer">e-Transfer</option>
+          </select>
           <input
             type="datetime-local"
             value={orderForm.scheduled_date}

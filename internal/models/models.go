@@ -32,6 +32,7 @@ type Order struct {
 	Status          string       `json:"status"`
 	TotalAmount     float64      `json:"total_amount"`
 	Notes           string       `json:"notes"`
+	PaymentMethod   string       `json:"payment_method"`
 	Items           string       `json:"items"`
 	OrderItems      []OrderItem  `json:"order_items"`
 	ScheduledDate   *time.Time   `json:"scheduled_date"`
