@@ -25,7 +25,7 @@ func Migrate() error {
 			created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
 			updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 		)`,
-	`CREATE TABLE IF NOT EXISTS orders (
+		`CREATE TABLE IF NOT EXISTS orders (
 		id SERIAL PRIMARY KEY,
 		customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
 		delivery_address TEXT NOT NULL,
@@ -68,8 +68,6 @@ func Migrate() error {
 		FOR EACH ROW
 		EXECUTE FUNCTION update_updated_at_column()`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP WITH TIME ZONE`,
-		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`,
-		`ALTER TABLE orders ALTER COLUMN scheduled_date TYPE TIMESTAMP WITH TIME ZONE`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`,
 	}
 

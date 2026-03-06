@@ -16,7 +16,7 @@ func main() {
 	// Get database config from environment variables with defaults
 	host := os.Getenv("DB_HOST")
 	if host == "" {
-		host = "localhost"
+		host = "172.17.32.1"
 	}
 
 	port := 5432

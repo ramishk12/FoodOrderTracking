@@ -408,6 +408,9 @@ function OrderEdit() {
         <div className="order-total">
           <strong>Total: ${calculateTotal().toFixed(2)}</strong>
         </div>
+        <div className="order-payment-method">
+          <strong>Payment Method:</strong> {formData.payment_method === 'e-transfer' ? 'e-Transfer' : 'Cash'}
+        </div>
       </div>
 
       {/* Add Items Section - Grouped by Category */}
