@@ -76,7 +76,7 @@ func GetDashboardStats(c *gin.Context) {
 	}
 
 	// Orders by status
-	statusRows, err := database.DB.Query("SELECT status, COUNT(*) FROM orders GROUP BY status")
+	statusRows, err := database.DB.Query("SELECT status, COUNT(*) FROM orders WHERE status IS NOT NULL AND status != '' GROUP BY status")
 	if err == nil {
 		defer statusRows.Close()
 		for statusRows.Next() {
