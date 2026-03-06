@@ -16,8 +16,10 @@ function Schedule() {
     try {
       setLoading(true);
       const data = await api.getScheduledOrders(days);
-      setOrders(data);
+      console.log('Loaded orders:', data);
+      setOrders(data || []);
     } catch (err) {
+      console.error('Error loading orders:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -103,8 +105,13 @@ function Schedule() {
         </div>
       </div>
 
+      <div style={{ padding: '1rem' }}>
+        <p>Total orders: {orders.length}</p>
+        <p>Days filter: {days}</p>
+      </div>
+
       {orders.length === 0 ? (
-        <p className="empty">No orders scheduled for the next {days} days.</p>
+        <p className="empty">No orders scheduled for the next {days} days. Create an order and set a scheduled date.</p>
       ) : (
         <div className="schedule-groups">
           {Object.entries(groupedOrders).map(([dateLabel, dateOrders]) => (
