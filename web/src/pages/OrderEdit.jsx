@@ -19,6 +19,7 @@ function OrderEdit() {
     customer_id: '',
     delivery_address: '',
     notes: '',
+    payment_method: 'cash',
     scheduled_date: ''
   });
   
@@ -63,6 +64,7 @@ function OrderEdit() {
         customer_id: orderData.customer_id ? String(orderData.customer_id) : '',
         delivery_address: orderData.delivery_address || '',
         notes: orderData.notes || '',
+        payment_method: orderData.payment_method || 'cash',
         scheduled_date: orderData.scheduled_date ? orderData.scheduled_date.slice(0, 16) : ''
       });
       
@@ -190,6 +192,7 @@ function OrderEdit() {
         customer_id: parseInt(formData.customer_id) || null,
         delivery_address: formData.delivery_address,
         notes: formData.notes,
+        payment_method: formData.payment_method,
         total_amount: calculateTotal(),
         scheduled_date: scheduledDateISO,
         items: selectedItems // Backend will handle updating order_items table
@@ -336,6 +339,18 @@ function OrderEdit() {
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           />
+        </div>
+
+        <div className="form-group">
+          <<div className="form-group">
+          <label>Payment Method</label>
+          <select
+            value={formData.payment_method}
+            onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
+          >
+            <option value="cash">Cash</option>
+            <option value="e-transfer">e-Transfer</option>
+          </select>
         </div>
 
         <div className="form-group">

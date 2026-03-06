@@ -8,6 +8,7 @@ function Orders() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState('');
   const [formData, setFormData] = useState({
     customer_id: '',
     delivery_address: '',
@@ -77,7 +78,8 @@ function Orders() {
       customer_id: order.customer_id ? String(order.customer_id) : '',
       delivery_address: order.delivery_address || '',
       total_amount: String(order.total_amount) || '',
-      notes: order.notes || '',
+      notes: order.notes,
+                       payment_method: order.payment_method || '',
       scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
     });
     setEditingId(order.id);
@@ -123,7 +125,8 @@ function Orders() {
       order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.delivery_address?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = !statusFilter || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesPayment = !paymentFilter || order.payment_method === paymentFilter;
+    return matchesSearch && matchesStatus && matchesPayment;
   });
 
   if (loading) return <div className="loading">Loading orders...</div>;
@@ -154,6 +157,15 @@ function Orders() {
           <option value="ready">Ready</option>
           <option value="delivered">Delivered</option>
           <option value="cancelled">Cancelled</option>
+        </select>
+        <select
+          value={paymentFilter}
+          onChange={(e) => setPaymentFilter(e.target.value)}
+          className="filter-select"
+        >
+          <option value="">All Payment Methods</option>
+          <option value="cash">Cash</option>
+          <option value="e-transfer">e-Transfer</option>
         </select>
       </div>
 
@@ -186,6 +198,7 @@ function Orders() {
                 )}
               </div>
               <p><strong>Total:</strong> ${order.total_amount}</p>
+               <p><strong>Payment Method:</strong> {order.payment_method === 'e-transfer' ? 'e-Transfer' : 'Cash'}</p>
               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
               {order.scheduled_date && (
                 <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
@@ -209,7 +222,8 @@ function Orders() {
                       delivery_address: order.delivery_address,
                       status: e.target.value,
                       total_amount: order.total_amount,
-                      notes: order.notes
+                      notes: order.notes,
+                       payment_method: order.payment_method
                     });
                     loadData();
                   } catch (err) {

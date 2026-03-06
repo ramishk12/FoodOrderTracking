@@ -35,12 +35,12 @@ func Seed() error {
 		`INSERT INTO items (name, description, price, category) VALUES ('Orange Juice', 'Fresh orange juice', 3.49, 'Drinks')`,
 		`INSERT INTO items (name, description, price, category) VALUES ('Water', 'Bottled water', 1.99, 'Drinks')`,
 
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, scheduled_date) VALUES (1, '123 Main St', 'pending', 25.99, 'Ring doorbell', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, scheduled_date) VALUES (2, '456 Oak Ave', 'preparing', 18.50, '', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '1 day')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes) VALUES (3, '789 Pine Rd', 'delivered', 32.00, 'Leave at door')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, scheduled_date) VALUES (4, '321 Elm St', 'ready', 15.99, '', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '3 days')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes) VALUES (5, '654 Maple Ave', 'cancelled', 0, 'Customer requested cancellation')`,
-		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, scheduled_date) VALUES (1, '123 Main St', 'pending', 12.99, '', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - INTERVAL '1 day')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, payment_method, scheduled_date) VALUES (1, '123 Main St', 'pending', 25.99, 'Ring doorbell', 'cash', CURRENT_TIMESTAMP AT TIME ZONE 'UTC')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, payment_method, scheduled_date) VALUES (2, '456 Oak Ave', 'preparing', 18.50, '', 'e-transfer', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '1 day')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, payment_method) VALUES (3, '789 Pine Rd', 'delivered', 32.00, 'Leave at door', 'cash')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, payment_method, scheduled_date) VALUES (4, '321 Elm St', 'ready', 15.99, '', 'e-transfer', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') + INTERVAL '3 days')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, payment_method) VALUES (5, '654 Maple Ave', 'cancelled', 0, 'Customer requested cancellation', 'cash')`,
+		`INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, payment_method, scheduled_date) VALUES (1, '123 Main St', 'pending', 12.99, '', 'cash', (CURRENT_TIMESTAMP AT TIME ZONE 'UTC') - INTERVAL '1 day')`,
 
 		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (1, 1, 2, 12.99, 25.98)`,
 		`INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal) VALUES (2, 4, 1, 10.99, 10.99)`,
