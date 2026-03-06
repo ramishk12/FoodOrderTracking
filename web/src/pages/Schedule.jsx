@@ -72,8 +72,6 @@ function Schedule() {
     return 'normal';
   };
 
-  const groupedOrders = groupOrdersByDate();
-
   const statusColors = {
     pending: '#f59e0b',
     preparing: '#3b82f6',
@@ -84,6 +82,8 @@ function Schedule() {
 
   if (loading) return <div className="loading">Loading schedule...</div>;
   if (error) return <div className="error">Error: {error}</div>;
+
+  const groupedOrders = groupOrdersByDate();
 
   return (
     <div className="page">
