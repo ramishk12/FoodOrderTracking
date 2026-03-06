@@ -318,8 +318,7 @@ function Items() {
             value={orderForm.notes}
             onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
           />
-          <input
-            <select
+          <select
             value={orderForm.payment_method}
             onChange={(e) => setOrderForm({ ...orderForm, payment_method: e.target.value })}
           >

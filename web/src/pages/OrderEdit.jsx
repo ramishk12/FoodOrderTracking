@@ -342,7 +342,6 @@ function OrderEdit() {
         </div>
 
         <div className="form-group">
-          <<div className="form-group">
           <label>Payment Method</label>
           <select
             value={formData.payment_method}
