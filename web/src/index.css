@@ -977,3 +977,80 @@ body {
   padding: 0.25rem 0.75rem;
   font-size: 0.8rem;
 }
+
+/* Customer Order History Panel */
+.order-history-panel {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  border: 1px solid #e5e7eb;
+}
+
+.order-history-panel h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: #374151;
+}
+
+.order-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.history-order-card {
+  background: #fff;
+  border-radius: 6px;
+  padding: 0.75rem;
+  border-left: 3px solid #3b82f6;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.history-order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.history-order-header .order-id {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.history-order-header .order-date {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.history-order-items {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.history-order-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.history-order-footer .order-total {
+  font-weight: 600;
+  color: #059669;
+  font-size: 0.9rem;
+}
+
+.history-order-footer .order-status {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  background: #dbeafe;
+  color: #1e40af;
+  text-transform: capitalize;
+}
