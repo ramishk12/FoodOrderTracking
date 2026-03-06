@@ -81,9 +81,7 @@ The pattern used in this application is:
 // Wrong: new Date(datetimeLocal).toISOString()
 // This interprets datetimeLocal as local time and converts, losing the intended time
 
-// Correct: datetimeLocal + ':00Z'
-// datetime-local format is "2026-03-05T10:30" (without seconds)
-// Need to add seconds for RFC3339 format: "2026-03-05T10:30:00Z"
+// Correct: datetimeLocal + 'Z'
 // This treats datetimeLocal as UTC directly
 ```
 
