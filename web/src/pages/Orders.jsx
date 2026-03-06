@@ -8,6 +8,19 @@ function Orders() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [formData, setFormData] = useState({
+    customer_id: '',
+    delivery_address: '',
+    total_amount: '',
+    notes: '',
+    scheduled_date: ''
+  });
+  const [customerData, setCustomerData] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    address: ''
+  });
 
   useEffect(() => {
     loadData();
@@ -23,6 +36,68 @@ function Orders() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = {
+        ...formData,
+        customer_id: parseInt(formData.customer_id) || null,
+        total_amount: parseFloat(formData.total_amount),
+        status: 'pending',
+        scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null
+      };
+      if (editingId) {
+        await api.updateOrder(editingId, data);
+      } else {
+        await api.createOrder(data);
+      }
+      handleCancel();
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleCustomerSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.createCustomer(customerData);
+      setShowCustomerForm(false);
+      setCustomerData({ name: '', phone: '', email: '', address: '' });
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleEdit = (order) => {
+    setFormData({
+      customer_id: order.customer_id ? String(order.customer_id) : '',
+      delivery_address: order.delivery_address || '',
+      total_amount: String(order.total_amount) || '',
+      notes: order.notes || '',
+      scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
+    });
+    setEditingId(order.id);
+    setShowForm(true);
+  };
+
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setShowCustomerForm(false);
+    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '', scheduled_date: '' });
+  };
+
+  const handleCustomerChange = (customerId) => {
+    const customer = customers.find(c => c.id === parseInt(customerId));
+    setFormData(prev => ({
+      ...prev,
+      customer_id: customerId,
+      delivery_address: customer?.address || prev.delivery_address
+    }));
   };
 
   const handleDelete = async (id) => {
@@ -112,6 +187,9 @@ function Orders() {
               </div>
               <p><strong>Total:</strong> ${order.total_amount}</p>
               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
+              {order.scheduled_date && (
+                <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+              )}
               {order.scheduled_date && (
                 <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               )}
