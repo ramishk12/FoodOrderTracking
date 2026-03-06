@@ -4,27 +4,10 @@ import { api } from '../services/api';
 
 function Orders() {
   const [orders, setOrders] = useState([]);
-  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [formData, setFormData] = useState({
-    customer_id: '',
-    delivery_address: '',
-    total_amount: '',
-    notes: '',
-    scheduled_date: ''
-  });
-  const [customerData, setCustomerData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    address: ''
-  });
 
   useEffect(() => {
     loadData();
@@ -33,79 +16,13 @@ function Orders() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [ordersData, customersData] = await Promise.all([
-        api.getOrders(),
-        api.getCustomers()
-      ]);
+      const ordersData = await api.getOrders();
       setOrders(ordersData);
-      setCustomers(customersData);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const data = {
-        ...formData,
-        customer_id: parseInt(formData.customer_id) || null,
-        total_amount: parseFloat(formData.total_amount),
-        status: 'pending',
-        scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null
-      };
-      if (editingId) {
-        await api.updateOrder(editingId, data);
-      } else {
-        await api.createOrder(data);
-      }
-      handleCancel();
-      loadData();
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  const handleCustomerSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await api.createCustomer(customerData);
-      setShowCustomerForm(false);
-      setCustomerData({ name: '', phone: '', email: '', address: '' });
-      loadData();
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  const handleEdit = (order) => {
-    setFormData({
-      customer_id: order.customer_id ? String(order.customer_id) : '',
-      delivery_address: order.delivery_address || '',
-      total_amount: String(order.total_amount) || '',
-      notes: order.notes || '',
-      scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
-    });
-    setEditingId(order.id);
-    setShowForm(true);
-  };
-
-  const handleCancel = () => {
-    setShowForm(false);
-    setEditingId(null);
-    setShowCustomerForm(false);
-    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '', scheduled_date: '' });
-  };
-
-  const handleCustomerChange = (customerId) => {
-    const customer = customers.find(c => c.id === parseInt(customerId));
-    setFormData(prev => ({
-      ...prev,
-      customer_id: customerId,
-      delivery_address: customer?.address || prev.delivery_address
-    }));
   };
 
   const handleDelete = async (id) => {
@@ -141,9 +58,6 @@ function Orders() {
     <div className="page">
       <div className="page-header">
         <h1>Orders</h1>
-        <button className="btn-primary" onClick={() => showForm ? handleCancel() : setShowForm(true)}>
-          {showForm ? 'Cancel' : 'New Order'}
-        </button>
       </div>
 
       <div className="filters">
@@ -167,86 +81,6 @@ function Orders() {
           <option value="cancelled">Cancelled</option>
         </select>
       </div>
-
-      {showForm && (
-        <form onSubmit={handleSubmit} className="form">
-          <h3>{editingId ? 'Edit Order' : 'New Order'}</h3>
-          <select
-            value={formData.customer_id}
-            onChange={(e) => handleCustomerChange(e.target.value)}
-          >
-            <option value="">Select Customer</option>
-            {customers.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <button type="button" className="btn-secondary" onClick={() => setShowCustomerForm(!showCustomerForm)}>
-            {showCustomerForm ? 'Cancel' : '+ New Customer'}
-          </button>
-          
-          {showCustomerForm && (
-            <div className="nested-form">
-              <input
-                type="text"
-                placeholder="Customer Name"
-                value={customerData.name}
-                onChange={(e) => setCustomerData({ ...customerData, name: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Phone"
-                value={customerData.phone}
-                onChange={(e) => setCustomerData({ ...customerData, phone: e.target.value })}
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={customerData.email}
-                onChange={(e) => setCustomerData({ ...customerData, email: e.target.value })}
-              />
-              <input
-                type="text"
-                placeholder="Address"
-                value={customerData.address}
-                onChange={(e) => setCustomerData({ ...customerData, address: e.target.value })}
-              />
-              <button type="submit" className="btn-primary" onClick={handleCustomerSubmit}>Add Customer</button>
-            </div>
-          )}
-
-          <input
-            type="text"
-            placeholder="Delivery Address"
-            value={formData.delivery_address}
-            onChange={(e) => setFormData({ ...formData, delivery_address: e.target.value })}
-          />
-          <input
-            type="number"
-            placeholder="Total Amount"
-            step="0.01"
-            value={formData.total_amount}
-            onChange={(e) => setFormData({ ...formData, total_amount: e.target.value })}
-            required
-          />
-          <input
-            type="text"
-            placeholder="Notes"
-            value={formData.notes}
-            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-          />
-          <input
-            type="datetime-local"
-            value={formData.scheduled_date}
-            onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
-          />
-          <div className="form-actions">
-            <button type="submit" className="btn-primary">
-              {editingId ? 'Update Order' : 'Create Order'}
-            </button>
-          </div>
-        </form>
-      )}
 
       <div className="card-grid">
         {filteredOrders.map((order) => (
