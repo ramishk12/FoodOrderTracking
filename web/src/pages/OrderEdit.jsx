@@ -18,7 +18,8 @@ function OrderEdit() {
   const [formData, setFormData] = useState({
     customer_id: '',
     delivery_address: '',
-    notes: ''
+    notes: '',
+    scheduled_date: ''
   });
   
   // Order items state - maps item_id to quantity
@@ -61,7 +62,8 @@ function OrderEdit() {
       setFormData({
         customer_id: orderData.customer_id ? String(orderData.customer_id) : '',
         delivery_address: orderData.delivery_address || '',
-        notes: orderData.notes || ''
+        notes: orderData.notes || '',
+        scheduled_date: orderData.scheduled_date ? orderData.scheduled_date.slice(0, 16) : ''
       });
       
       // Convert order items array to object for easy quantity management
@@ -182,6 +184,7 @@ function OrderEdit() {
         delivery_address: formData.delivery_address,
         notes: formData.notes,
         total_amount: calculateTotal(),
+        scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null,
         items: selectedItems // Backend will handle updating order_items table
       });
       
@@ -325,6 +328,15 @@ function OrderEdit() {
             placeholder="Order Notes"
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Scheduled Date & Time</label>
+          <input
+            type="datetime-local"
+            value={formData.scheduled_date}
+            onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
           />
         </div>
       </div>

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/models"
@@ -15,11 +16,11 @@ import (
 
 func GetOrders(c *gin.Context) {
 	rows, err := database.DB.Query(`
-		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.created_at, o.updated_at,
+		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.scheduled_date, o.created_at, o.updated_at,
 		       COALESCE(c.name, ''), COALESCE(c.phone, '')
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
-		ORDER BY o.created_at DESC
+		ORDER BY COALESCE(o.scheduled_date, o.created_at) DESC
 	`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -30,7 +31,7 @@ func GetOrders(c *gin.Context) {
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
 			orders = append(orders, o)
 		}
 	}
@@ -58,6 +59,69 @@ func GetOrders(c *gin.Context) {
 		itemRows.Close()
 
 		orders[i].OrderItems = orderItems
+	}
+
+	c.JSON(http.StatusOK, orders)
+}
+
+func GetScheduledOrders(c *gin.Context) {
+	daysStr := c.DefaultQuery("days", "7")
+	days, err := strconv.Atoi(daysStr)
+	if err != nil || days < 1 {
+		days = 7
+	}
+
+	now := time.Now()
+	endDate := now.AddDate(0, 0, days)
+
+	rows, err := database.DB.Query(`
+		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.scheduled_date, o.created_at, o.updated_at,
+		       COALESCE(c.name, ''), COALESCE(c.phone, '')
+		FROM orders o
+		LEFT JOIN customers c ON o.customer_id = c.id
+		WHERE o.scheduled_date IS NOT NULL AND o.scheduled_date >= $1 AND o.scheduled_date <= $2
+		AND o.status NOT IN ('delivered', 'cancelled')
+		ORDER BY o.scheduled_date ASC
+	`, now, endDate)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var o models.Order
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
+			orders = append(orders, o)
+		}
+	}
+
+	// Get order items for each order
+	for i := range orders {
+		itemRows, err := database.DB.Query(`
+			SELECT oi.quantity, i.name
+			FROM order_items oi
+			JOIN items i ON oi.item_id = i.id
+			WHERE oi.order_id = $1
+		`, orders[i].ID)
+		if err != nil {
+			continue
+		}
+
+		var items []string
+		for itemRows.Next() {
+			var qty int
+			var name string
+			if err := itemRows.Scan(&qty, &name); err == nil {
+				items = append(items, fmt.Sprintf("%dx %s", qty, name))
+			}
+		}
+		itemRows.Close()
+
+		if len(items) > 0 {
+			orders[i].Items = strings.Join(items, ", ")
+		}
 	}
 
 	c.JSON(http.StatusOK, orders)
@@ -132,12 +196,12 @@ func GetOrder(c *gin.Context) {
 
 	var o models.Order
 	err = database.DB.QueryRow(`
-		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.created_at, o.updated_at,
+		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.scheduled_date, o.created_at, o.updated_at,
 		       COALESCE(c.name, ''), COALESCE(c.phone, '')
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
 		WHERE o.id = $1
-	`, id).Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone)
+	`, id).Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
@@ -169,10 +233,11 @@ func GetOrder(c *gin.Context) {
 
 func CreateOrder(c *gin.Context) {
 	var input struct {
-		CustomerID      int    `json:"customer_id"`
-		DeliveryAddress string `json:"delivery_address"`
-		Status          string `json:"status"`
-		Notes           string `json:"notes"`
+		CustomerID      int        `json:"customer_id"`
+		DeliveryAddress string     `json:"delivery_address"`
+		Status          string     `json:"status"`
+		Notes           string     `json:"notes"`
+		ScheduledDate   *time.Time `json:"scheduled_date"`
 		Items           []struct {
 			ItemID   int `json:"item_id"`
 			Quantity int `json:"quantity"`
@@ -206,11 +271,15 @@ func CreateOrder(c *gin.Context) {
 	}
 
 	var orderID int
+	scheduledDateUTC := input.ScheduledDate
+	if scheduledDateUTC != nil {
+		*scheduledDateUTC = scheduledDateUTC.UTC()
+	}
 	err = tx.QueryRow(`
-		INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO orders (customer_id, delivery_address, status, total_amount, notes, scheduled_date)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
-	`, input.CustomerID, input.DeliveryAddress, input.Status, totalAmount, input.Notes).Scan(&orderID)
+	`, input.CustomerID, input.DeliveryAddress, input.Status, totalAmount, input.Notes, scheduledDateUTC).Scan(&orderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -244,11 +313,12 @@ func UpdateOrder(c *gin.Context) {
 	}
 
 	var input struct {
-		CustomerID      int     `json:"customer_id"`
-		DeliveryAddress string  `json:"delivery_address"`
-		Status          string  `json:"status"`
-		TotalAmount     float64 `json:"total_amount"`
-		Notes           string  `json:"notes"`
+		CustomerID      int        `json:"customer_id"`
+		DeliveryAddress string     `json:"delivery_address"`
+		Status          string     `json:"status"`
+		TotalAmount     float64    `json:"total_amount"`
+		Notes           string     `json:"notes"`
+		ScheduledDate   *time.Time `json:"scheduled_date"`
 		Items           []struct {
 			ItemID   int `json:"item_id"`
 			Quantity int `json:"quantity"`
@@ -267,10 +337,14 @@ func UpdateOrder(c *gin.Context) {
 	defer tx.Rollback()
 
 	// Update order details
+	scheduledDateUTC := input.ScheduledDate
+	if scheduledDateUTC != nil {
+		*scheduledDateUTC = scheduledDateUTC.UTC()
+	}
 	_, err = tx.Exec(`
-		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, notes = $5, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $6
-	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Notes, id)
+		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, notes = $5, scheduled_date = $6, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $7
+	`, input.CustomerID, input.DeliveryAddress, input.Status, input.TotalAmount, input.Notes, scheduledDateUTC, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

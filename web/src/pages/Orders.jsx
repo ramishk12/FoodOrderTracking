@@ -16,7 +16,8 @@ function Orders() {
     customer_id: '',
     delivery_address: '',
     total_amount: '',
-    notes: ''
+    notes: '',
+    scheduled_date: ''
   });
   const [customerData, setCustomerData] = useState({
     name: '',
@@ -52,7 +53,8 @@ function Orders() {
         ...formData,
         customer_id: parseInt(formData.customer_id) || null,
         total_amount: parseFloat(formData.total_amount),
-        status: 'pending'
+        status: 'pending',
+        scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null
       };
       if (editingId) {
         await api.updateOrder(editingId, data);
@@ -83,7 +85,8 @@ function Orders() {
       customer_id: order.customer_id ? String(order.customer_id) : '',
       delivery_address: order.delivery_address || '',
       total_amount: String(order.total_amount) || '',
-      notes: order.notes || ''
+      notes: order.notes || '',
+      scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
     });
     setEditingId(order.id);
     setShowForm(true);
@@ -93,7 +96,7 @@ function Orders() {
     setShowForm(false);
     setEditingId(null);
     setShowCustomerForm(false);
-    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '' });
+    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '', scheduled_date: '' });
   };
 
   const handleCustomerChange = (customerId) => {
@@ -232,6 +235,11 @@ function Orders() {
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           />
+          <input
+            type="datetime-local"
+            value={formData.scheduled_date}
+            onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
+          />
           <div className="form-actions">
             <button type="submit" className="btn-primary">
               {editingId ? 'Update Order' : 'Create Order'}
@@ -270,6 +278,9 @@ function Orders() {
               </div>
               <p><strong>Total:</strong> ${order.total_amount}</p>
               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
+              {order.scheduled_date && (
+                <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+              )}
               <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               {order.updated_at && order.updated_at !== order.created_at && (
                 <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>

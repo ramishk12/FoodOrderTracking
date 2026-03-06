@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
+import Schedule from './pages/Schedule'
 import Orders from './pages/Orders'
 import OrderEdit from './pages/OrderEdit'
 import Customers from './pages/Customers'
@@ -17,6 +18,7 @@ function Navbar() {
   const links = [
     { path: '/', label: 'Home' },
     { path: '/dashboard', label: 'Dashboard' },
+    { path: '/schedule', label: 'Schedule' },
     { path: '/items', label: 'Menu' },
     { path: '/orders', label: 'Orders' },
     { path: '/customers', label: 'Customers' },
@@ -48,6 +50,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/schedule" element={<Schedule />} />
           <Route path="/items" element={<Items />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/:id/edit" element={<OrderEditWrapper />} />

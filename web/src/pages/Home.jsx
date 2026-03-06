@@ -11,6 +11,10 @@ function Home() {
           <h3>📊 Dashboard</h3>
           <p>View sales analytics and insights</p>
         </Link>
+        <Link to="/schedule" className="home-card">
+          <h3>📅 Schedule</h3>
+          <p>View upcoming orders</p>
+        </Link>
         <Link to="/items" className="home-card">
           <h3>🍕 Menu</h3>
           <p>Browse and order menu items</p>

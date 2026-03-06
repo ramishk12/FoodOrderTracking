@@ -15,9 +15,11 @@ async function request(endpoint, options = {}) {
   }
 
   const method = config.method || 'GET';
-  const url = method === 'GET' 
-    ? `${API_BASE}${endpoint}?t=${Date.now()}` 
-    : `${API_BASE}${endpoint}`;
+  let url = `${API_BASE}${endpoint}`;
+  if (method === 'GET') {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    url += `${separator}t=${Date.now()}`;
+  }
   
   const response = await fetch(url, config);
   
@@ -43,6 +45,7 @@ export const api = {
   deleteItem: (id) => request(`/items/${id}`, { method: 'DELETE' }),
 
   getOrders: () => request('/orders'),
+  getScheduledOrders: (days = 7) => request(`/orders/scheduled?days=${days}`),
   getOrdersByCustomer: (customerId) => request(`/orders/customer/${customerId}`),
   getOrder: (id) => request(`/orders/${id}`),
   createOrder: (data) => request('/orders', { method: 'POST', body: data }),

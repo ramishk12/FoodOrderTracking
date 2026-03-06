@@ -15,7 +15,8 @@ function Items() {
   const [orderForm, setOrderForm] = useState({
     customer_id: '',
     delivery_address: '',
-    notes: ''
+    notes: '',
+    scheduled_date: ''
   });
   const [itemForm, setItemForm] = useState({
     name: '',
@@ -91,6 +92,7 @@ function Items() {
         customer_id: parseInt(orderForm.customer_id) || null,
         delivery_address: orderForm.delivery_address,
         notes: orderForm.notes,
+        scheduled_date: orderForm.scheduled_date ? new Date(orderForm.scheduled_date).toISOString() : null,
         items: orderItems
       });
       alert('Order created successfully!');
@@ -100,7 +102,7 @@ function Items() {
         Object.keys(reset).forEach(key => reset[key] = 0);
         return reset;
       });
-      setOrderForm({ customer_id: '', delivery_address: '', notes: '' });
+      setOrderForm({ customer_id: '', delivery_address: '', notes: '', scheduled_date: '' });
     } catch (err) {
       alert(err.message);
     }
@@ -288,6 +290,11 @@ function Items() {
             placeholder="Notes"
             value={orderForm.notes}
             onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
+          />
+          <input
+            type="datetime-local"
+            value={orderForm.scheduled_date}
+            onChange={(e) => setOrderForm({ ...orderForm, scheduled_date: e.target.value })}
           />
           <div className="order-summary">
             <h4>Order Summary:</h4>

@@ -31,11 +31,12 @@ type Order struct {
 	DeliveryAddress string       `json:"delivery_address"`
 	Status          string       `json:"status"`
 	TotalAmount     float64      `json:"total_amount"`
-	Notes          string       `json:"notes"`
-	Items          string       `json:"items"`
-	OrderItems     []OrderItem  `json:"order_items"`
-	CreatedAt      time.Time    `json:"created_at"`
-	UpdatedAt      time.Time    `json:"updated_at"`
+	Notes           string       `json:"notes"`
+	Items           string       `json:"items"`
+	OrderItems      []OrderItem  `json:"order_items"`
+	ScheduledDate   *time.Time   `json:"scheduled_date"`
+	CreatedAt       time.Time    `json:"created_at"`
+	UpdatedAt       time.Time    `json:"updated_at"`
 }
 
 type OrderItem struct {
