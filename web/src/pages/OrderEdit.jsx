@@ -284,7 +284,7 @@ function OrderEdit() {
               className="collapsible"
               onClick={() => setShowOrderHistory(!showOrderHistory)}
             >
-              Order History ({customerOrders.length} orders)
+              Order History ({customerOrders.length} {customerOrders.length === 1 ? 'order' : 'orders'})
             </button>
             {showOrderHistory && (
               <div className="order-history-content">
