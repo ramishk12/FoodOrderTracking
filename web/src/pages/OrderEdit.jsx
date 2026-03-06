@@ -60,12 +60,26 @@ function OrderEdit() {
       setItems(itemsData);
       
       // Initialize form data with existing order values
+      // Convert UTC scheduled_date to local timezone for datetime-local input
+      let localScheduledDate = '';
+      if (orderData.scheduled_date) {
+        // Parse UTC timestamp from database (e.g., "2026-03-06T14:30:26.052863Z")
+        const utcDate = new Date(orderData.scheduled_date);
+        // Convert to local timezone and format as datetime-local (YYYY-MM-DDTHH:mm)
+        const year = utcDate.getFullYear();
+        const month = String(utcDate.getMonth() + 1).padStart(2, '0');
+        const day = String(utcDate.getDate()).padStart(2, '0');
+        const hours = String(utcDate.getHours()).padStart(2, '0');
+        const minutes = String(utcDate.getMinutes()).padStart(2, '0');
+        localScheduledDate = `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
+      
       setFormData({
         customer_id: orderData.customer_id ? String(orderData.customer_id) : '',
         delivery_address: orderData.delivery_address || '',
         notes: orderData.notes || '',
         payment_method: orderData.payment_method || 'cash',
-        scheduled_date: orderData.scheduled_date ? orderData.scheduled_date.slice(0, 16) : ''
+        scheduled_date: localScheduledDate
       });
       
       // Convert order items array to object for easy quantity management
@@ -180,12 +194,22 @@ function OrderEdit() {
     try {
       const selectedItems = getSelectedItems();
       
-      // Convert datetime-local to RFC3339 ISO string treating it as UTC
-      // datetime-local format: "2026-03-05T10:30" needs to be "2026-03-05T10:30:00Z" for RFC3339
-      let scheduledDateISO = null;
-      if (formData.scheduled_date) {
-        scheduledDateISO = formData.scheduled_date + ':00Z';
-      }
+       // Convert datetime-local (in user's local timezone) to UTC for storage
+       // datetime-local format: "2026-03-06T14:30" represents user's local time
+       // We need to convert to UTC before sending to backend
+       let scheduledDateISO = null;
+       if (formData.scheduled_date) {
+         // Parse the local datetime and convert to UTC
+         const localDate = new Date(formData.scheduled_date);
+         // Get UTC components
+         const year = localDate.getUTCFullYear();
+         const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+         const day = String(localDate.getUTCDate()).padStart(2, '0');
+         const hours = String(localDate.getUTCHours()).padStart(2, '0');
+         const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+         const seconds = '00';
+         scheduledDateISO = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`;
+       }
       
       // Update order with new data
       await api.updateOrder(parseInt(id), {

@@ -353,6 +353,7 @@ func UpdateOrder(c *gin.Context) {
 	if scheduledDateUTC != nil {
 		*scheduledDateUTC = scheduledDateUTC.UTC()
 	}
+	
 	_, err = tx.Exec(`
 		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, notes = $5, payment_method = $6, scheduled_date = $7, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $8

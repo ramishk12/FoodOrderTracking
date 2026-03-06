@@ -107,11 +107,21 @@ function Items() {
     }));
 
     try {
-      // Convert datetime-local to RFC3339 ISO string treating it as UTC
-      // datetime-local format: "2026-03-05T10:30" needs to be "2026-03-05T10:30:00Z" for RFC3339
+      // Convert datetime-local (in user's local timezone) to UTC for storage
+      // datetime-local format: "2026-03-06T14:30" represents user's local time
+      // We need to convert to UTC before sending to backend
       let scheduledDateISO = null;
       if (orderForm.scheduled_date) {
-        scheduledDateISO = orderForm.scheduled_date + ':00Z';
+        // Parse the local datetime and convert to UTC
+        const localDate = new Date(orderForm.scheduled_date);
+        // Get UTC components
+        const year = localDate.getUTCFullYear();
+        const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(localDate.getUTCDate()).padStart(2, '0');
+        const hours = String(localDate.getUTCHours()).padStart(2, '0');
+        const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+        const seconds = '00';
+        scheduledDateISO = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`;
       }
       
       await api.createOrder({

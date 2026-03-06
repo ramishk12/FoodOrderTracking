@@ -36,7 +36,7 @@ func Migrate() error {
 		scheduled_date TIMESTAMP,
 		created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
 		updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
-	)`,
+		)`,
 		`CREATE TABLE IF NOT EXISTS order_items (
 			id SERIAL PRIMARY KEY,
 			order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
