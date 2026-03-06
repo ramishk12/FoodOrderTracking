@@ -15,9 +15,11 @@ async function request(endpoint, options = {}) {
   }
 
   const method = config.method || 'GET';
-  const url = method === 'GET' 
-    ? `${API_BASE}${endpoint}?t=${Date.now()}` 
-    : `${API_BASE}${endpoint}`;
+  let url = `${API_BASE}${endpoint}`;
+  if (method === 'GET') {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    url += `${separator}t=${Date.now()}`;
+  }
   
   const response = await fetch(url, config);
   
