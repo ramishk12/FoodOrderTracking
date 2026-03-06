@@ -9,6 +9,13 @@ function Orders() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
+  const [expandedSections, setExpandedSections] = useState({
+    pending: true,
+    preparing: true,
+    ready: true,
+    delivered: false,
+    cancelled: false
+  });
   const [formData, setFormData] = useState({
     customer_id: '',
     delivery_address: '',
@@ -22,6 +29,10 @@ function Orders() {
     email: '',
     address: ''
   });
+  const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [customers, setCustomers] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -120,6 +131,41 @@ function Orders() {
     cancelled: '#ef4444',
   };
 
+  const statusLabels = {
+    pending: 'Pending',
+    preparing: 'Preparing',
+    ready: 'Ready',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled'
+  };
+
+  const toggleSection = (status) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [status]: !prev[status]
+    }));
+  };
+
+  const expandAllSections = () => {
+    setExpandedSections({
+      pending: true,
+      preparing: true,
+      ready: true,
+      delivered: true,
+      cancelled: true
+    });
+  };
+
+  const collapseAllSections = () => {
+    setExpandedSections({
+      pending: false,
+      preparing: false,
+      ready: false,
+      delivered: false,
+      cancelled: false
+    });
+  };
+
   const filteredOrders = orders.filter(order => {
     const matchesSearch = !searchTerm || 
       order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -128,6 +174,15 @@ function Orders() {
     const matchesPayment = !paymentFilter || order.payment_method === paymentFilter;
     return matchesSearch && matchesStatus && matchesPayment;
   });
+
+  // Group filtered orders by status
+  const groupedOrders = {
+    pending: filteredOrders.filter(o => o.status === 'pending'),
+    preparing: filteredOrders.filter(o => o.status === 'preparing'),
+    ready: filteredOrders.filter(o => o.status === 'ready'),
+    delivered: filteredOrders.filter(o => o.status === 'delivered'),
+    cancelled: filteredOrders.filter(o => o.status === 'cancelled')
+  };
 
   if (loading) return <div className="loading">Loading orders...</div>;
   if (error) return <div className="error">Error: {error}</div>;
@@ -169,79 +224,108 @@ function Orders() {
         </select>
       </div>
 
-      <div className="card-grid">
-        {filteredOrders.map((order) => (
-          <div key={order.id} className="card">
-            <div className="card-header">
-              <span className="order-id">Order #{order.id}</span>
-              <span 
-                className="status-badge"
-                style={{ backgroundColor: statusColors[order.status] || '#666' }}
-              >
-                {order.status}
+      <div className="section-controls">
+        <button className="btn-secondary" onClick={expandAllSections}>Expand All</button>
+        <button className="btn-secondary" onClick={collapseAllSections}>Collapse All</button>
+      </div>
+
+      <div className="orders-by-status">
+        {Object.keys(groupedOrders).map((status) => (
+          <div key={status} className="status-section">
+            <button
+              className="status-section-header"
+              onClick={() => toggleSection(status)}
+              style={{ borderLeftColor: statusColors[status] }}
+            >
+              <span className="section-toggle">
+                {expandedSections[status] ? '▼' : '▶'}
               </span>
-            </div>
-            <div className="card-body">
-              <p><strong>Customer:</strong> {order.customer_name || 'No Customer'}</p>
-              <p><strong>Phone:</strong> {order.customer_phone || 'N/A'}</p>
-              <p><strong>Address:</strong> {order.delivery_address}</p>
-              <div className="order-items-list">
-                <strong>Items:</strong>
-                {order.order_items && order.order_items.length > 0 ? (
-                  <ul>
-                    {order.order_items.map((item, index) => (
-                      <li key={index}>{item.quantity}x {item.item_name}</li>
-                    ))}
-                  </ul>
+              <span className="section-title">{statusLabels[status]}</span>
+              <span className="section-count">({groupedOrders[status].length})</span>
+            </button>
+            
+            {expandedSections[status] && (
+              <div className="status-section-content">
+                {groupedOrders[status].length === 0 ? (
+                  <p className="empty-section">No {statusLabels[status].toLowerCase()} orders</p>
                 ) : (
-                  <span className="no-items">No items</span>
+                  <div className="card-grid">
+                    {groupedOrders[status].map((order) => (
+                      <div key={order.id} className="card">
+                        <div className="card-header">
+                          <span className="order-id">Order #{order.id}</span>
+                          <span 
+                            className="status-badge"
+                            style={{ backgroundColor: statusColors[order.status] || '#666' }}
+                          >
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="card-body">
+                          <p><strong>Customer:</strong> {order.customer_name || 'No Customer'}</p>
+                          <p><strong>Phone:</strong> {order.customer_phone || 'N/A'}</p>
+                          <p><strong>Address:</strong> {order.delivery_address}</p>
+                          <div className="order-items-list">
+                            <strong>Items:</strong>
+                            {order.order_items && order.order_items.length > 0 ? (
+                              <ul>
+                                {order.order_items.map((item, index) => (
+                                  <li key={index}>{item.quantity}x {item.item_name}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span className="no-items">No items</span>
+                            )}
+                          </div>
+                           <p><strong>Total:</strong> ${order.total_amount}</p>
+                           <p><strong>Payment Method:</strong> {order.payment_method === 'e-transfer' ? 'e-Transfer' : 'Cash'}</p>
+                           {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
+                            {order.scheduled_date && (
+                              <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US')}</p>
+                            )}
+                           <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US')}</p>
+                           {order.updated_at && order.updated_at !== order.created_at && (
+                           <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US')}</p>
+                           )}
+                        </div>
+                        <div className="card-actions">
+                          <Link to={`/orders/${order.id}/edit`} className="btn-primary">Edit</Link>
+                          <select
+                            value={order.status}
+                            onChange={async (e) => {
+                              try {
+                                await api.updateOrder(order.id, {
+                                  customer_id: order.customer_id,
+                                  delivery_address: order.delivery_address,
+                                  status: e.target.value,
+                                  total_amount: order.total_amount,
+                                  notes: order.notes
+                                });
+                                loadData();
+                              } catch (err) {
+                                alert(err.message);
+                              }
+                            }}
+                            className="status-select"
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="preparing">Preparing</option>
+                            <option value="ready">Ready</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                          <button className="btn-danger" onClick={() => handleDelete(order.id)}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-               <p><strong>Total:</strong> ${order.total_amount}</p>
-               <p><strong>Payment Method:</strong> {order.payment_method === 'e-transfer' ? 'e-Transfer' : 'Cash'}</p>
-               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
-                {order.scheduled_date && (
-                  <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US')}</p>
-                )}
-               <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US')}</p>
-               {order.updated_at && order.updated_at !== order.created_at && (
-               <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US')}</p>
-               )}
-            </div>
-            <div className="card-actions">
-              <Link to={`/orders/${order.id}/edit`} className="btn-primary">Edit</Link>
-              <select
-                value={order.status}
-                onChange={async (e) => {
-                  try {
-                    await api.updateOrder(order.id, {
-                      customer_id: order.customer_id,
-                      delivery_address: order.delivery_address,
-                      status: e.target.value,
-                      total_amount: order.total_amount,
-                      notes: order.notes,
-                      payment_method: order.payment_method,
-                      scheduled_date: order.scheduled_date
-                    });
-                    loadData();
-                  } catch (err) {
-                    alert(err.message);
-                  }
-                }}
-                className="status-select"
-              >
-                <option value="pending">Pending</option>
-                <option value="preparing">Preparing</option>
-                <option value="ready">Ready</option>
-                <option value="delivered">Delivered</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <button className="btn-danger" onClick={() => handleDelete(order.id)}>Delete</button>
-            </div>
+            )}
           </div>
         ))}
       </div>
-      {orders.length === 0 && <p className="empty">No orders yet</p>}
+      {filteredOrders.length === 0 && <p className="empty">No orders matching your filters</p>}
     </div>
   );
 }
