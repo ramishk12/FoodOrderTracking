@@ -22,7 +22,8 @@ FoodOrderTracking/
 │   │   └── seed.go          # Sample data
 │   ├── handlers/
 │   │   ├── customer.go      # Customer API
-│   │   └── order.go        # Order API
+│   │   ├── order.go         # Order API
+│   │   └── item.go          # Menu Item API
 │   └── models/
 │       └── models.go        # Data models
 ├── pkg/
@@ -31,9 +32,11 @@ FoodOrderTracking/
     │   ├── pages/
     │   │   ├── Home.jsx
     │   │   ├── Orders.jsx
-    │   │   └── Customers.jsx
+    │   │   ├── OrderEdit.jsx
+    │   │   ├── Customers.jsx
+    │   │   └── Items.jsx
     │   ├── services/
-    │   │   └── api.js      # API client
+    │   │   └── api.js       # API client
     │   ├── App.jsx
     │   └── index.css
     └── package.json
@@ -87,6 +90,18 @@ The app runs on `http://localhost:3000`
 | created_at | TIMESTAMP    | Creation date      |
 | updated_at | TIMESTAMP    | Last update        |
 
+### Items Table
+| Column      | Type          | Description          |
+|-------------|---------------|---------------------|
+| id          | SERIAL        | Primary key         |
+| name        | VARCHAR(255)  | Item name           |
+| description | TEXT          | Item description    |
+| price       | DECIMAL(10,2) | Item price          |
+| category    | VARCHAR(100)  | Item category       |
+| available   | BOOLEAN       | Is available        |
+| created_at  | TIMESTAMP     | Creation date       |
+| updated_at  | TIMESTAMP     | Last update         |
+
 ### Orders Table
 | Column           | Type         | Description           |
 |------------------|--------------|----------------------|
@@ -95,30 +110,48 @@ The app runs on `http://localhost:3000`
 | delivery_address | TEXT         | Delivery address     |
 | status           | VARCHAR(50)  | Order status        |
 | total_amount     | DECIMAL(10,2)| Order total         |
-| items            | TEXT         | Ordered items        |
 | notes            | TEXT         | Order notes          |
 | created_at       | TIMESTAMP    | Creation date        |
 | updated_at       | TIMESTAMP    | Last update          |
 
+### Order Items Table
+| Column      | Type          | Description          |
+|-------------|---------------|---------------------|
+| id          | SERIAL        | Primary key         |
+| order_id    | INTEGER       | FK to orders        |
+| item_id     | INTEGER       | FK to items         |
+| quantity    | INTEGER       | Item quantity       |
+| unit_price  | DECIMAL(10,2) | Price per unit      |
+| subtotal    | DECIMAL(10,2) | Quantity * unit_price|
+
 ## API Endpoints
 
 ### Customers
-| Method | Endpoint      | Description        |
-|--------|---------------|-------------------|
-| GET    | /api/customers      | List all customers |
-| GET    | /api/customers/:id  | Get customer      |
-| POST   | /api/customers      | Create customer   |
-| PUT    | /api/customers/:id  | Update customer   |
-| DELETE | /api/customers/:id  | Delete customer   |
+| Method | Endpoint         | Description        |
+|--------|-----------------|-------------------|
+| GET    | /api/customers | List all customers |
+| GET    | /api/customers/:id | Get customer   |
+| POST   | /api/customers | Create customer    |
+| PUT    | /api/customers/:id | Update customer |
+| DELETE | /api/customers/:id | Delete customer |
 
 ### Orders
 | Method | Endpoint      | Description        |
-|--------|---------------|-------------------|
-| GET    | /api/orders         | List all orders   |
-| GET    | /api/orders/:id     | Get order         |
-| POST   | /api/orders         | Create order      |
-| PUT    | /api/orders/:id     | Update order      |
-| DELETE | /api/orders/:id     | Delete order      |
+|--------|--------------|-------------------|
+| GET    | /api/orders  | List all orders   |
+| GET    | /api/orders/:id | Get order      |
+| POST   | /api/orders  | Create order      |
+| PUT    | /api/orders/:id | Update order    |
+| DELETE | /api/orders/:id | Delete order    |
+
+### Items
+| Method | Endpoint   | Description          |
+|--------|-----------|---------------------|
+| GET    | /api/items | List all menu items |
+| GET    | /api/items/:id | Get item         |
+| POST   | /api/items | Create menu item    |
+| PUT    | /api/items/:id | Update menu item |
+| DELETE | /api/items/:id | Delete menu item |
 
 ## Order Statuses
 
@@ -130,6 +163,17 @@ The app runs on `http://localhost:3000`
 
 ## Features
 
-- **Orders Page**: View, create, edit, delete orders; update status
-- **Customers Page**: Manage customer database
-- **Home Page**: Navigation to Orders and Customers
+- **Home Page**: Navigation to all sections
+- **Orders Page**: View, create, edit, delete orders; update status; filter by status
+- **Order Edit Page**: Edit order details and items with full quantity management
+- **Customers Page**: Manage customer database; add, edit, delete customers
+- **Menu Items Page**: Manage menu items; add, edit, delete items; set availability by category
+- **Search/Filter**: Search orders by customer name; filter orders by status
+
+## Recent Updates
+
+- Added menu items management with categories and availability
+- Added order edit page with item quantity management
+- Added search and filter functionality on orders page
+- Updated database to use order_items table instead of items text field
+- Added automatic updated_at timestamp tracking via database triggers
