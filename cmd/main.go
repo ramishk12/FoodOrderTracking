@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 
 	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/handlers"
@@ -11,13 +13,43 @@ import (
 )
 
 func main() {
-	cfg := database.Config{
-		Host:     "localhost",
-		Port:     5432,
-		User:     "postgres",
-		Password: "pgtest",
-		DBName:   "food_order_tracking",
+	// Get database config from environment variables with defaults
+	host := os.Getenv("DB_HOST")
+	if host == "" {
+		host = "localhost"
 	}
+
+	port := 5432
+	if portStr := os.Getenv("DB_PORT"); portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil {
+			port = p
+		}
+	}
+
+	user := os.Getenv("DB_USER")
+	if user == "" {
+		user = "postgres"
+	}
+
+	password := os.Getenv("DB_PASSWORD")
+	if password == "" {
+		password = "pgtest"
+	}
+
+	dbname := os.Getenv("DB_NAME")
+	if dbname == "" {
+		dbname = "food_order_tracking"
+	}
+
+	cfg := database.Config{
+		Host:     host,
+		Port:     port,
+		User:     user,
+		Password: password,
+		DBName:   dbname,
+	}
+
+	log.Printf("Connecting to database at %s:%d as %s", cfg.Host, cfg.Port, cfg.User)
 
 	if err := database.Connect(cfg); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)

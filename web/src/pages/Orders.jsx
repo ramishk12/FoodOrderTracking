@@ -78,7 +78,8 @@ function Orders() {
       customer_id: order.customer_id ? String(order.customer_id) : '',
       delivery_address: order.delivery_address || '',
       total_amount: String(order.total_amount) || '',
-      notes: order.notes || '',
+      notes: order.notes,
+                       payment_method: order.payment_method || '',
       scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
     });
     setEditingId(order.id);
@@ -204,28 +205,28 @@ function Orders() {
                )}
               <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               {order.updated_at && order.updated_at !== order.created_at && (
-                <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+              <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               )}
             </div>
             <div className="card-actions">
               <Link to={`/orders/${order.id}/edit`} className="btn-primary">Edit</Link>
               <select
                 value={order.status}
-                 onChange={async (e) => {
-                   try {
-                     await api.updateOrder(order.id, {
-                       customer_id: order.customer_id,
-                       delivery_address: order.delivery_address,
-                       status: e.target.value,
-                       total_amount: order.total_amount,
-                       notes: order.notes,
-                       payment_method: order.payment_method
-                     });
-                     loadData();
-                   } catch (err) {
-                     alert(err.message);
-                   }
-                 }}
+                onChange={async (e) => {
+                  try {
+                    await api.updateOrder(order.id, {
+                      customer_id: order.customer_id,
+                      delivery_address: order.delivery_address,
+                      status: e.target.value,
+                      total_amount: order.total_amount,
+                      notes: order.notes,
+                      payment_method: order.payment_method
+                    });
+                    loadData();
+                  } catch (err) {
+                    alert(err.message);
+                  }
+                }}
                 className="status-select"
               >
                 <option value="pending">Pending</option>
