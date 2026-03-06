@@ -71,7 +71,7 @@ func GetScheduledOrders(c *gin.Context) {
 		days = 7
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	endDate := now.AddDate(0, 0, days)
 
 	rows, err := database.DB.Query(`
