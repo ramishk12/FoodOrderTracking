@@ -16,7 +16,8 @@ function Orders() {
     customer_id: '',
     delivery_address: '',
     total_amount: '',
-    notes: ''
+    notes: '',
+    scheduled_date: ''
   });
   const [customerData, setCustomerData] = useState({
     name: '',
@@ -52,7 +53,8 @@ function Orders() {
         ...formData,
         customer_id: parseInt(formData.customer_id) || null,
         total_amount: parseFloat(formData.total_amount),
-        status: 'pending'
+        status: 'pending',
+        scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null
       };
       if (editingId) {
         await api.updateOrder(editingId, data);
@@ -83,7 +85,8 @@ function Orders() {
       customer_id: order.customer_id ? String(order.customer_id) : '',
       delivery_address: order.delivery_address || '',
       total_amount: String(order.total_amount) || '',
-      notes: order.notes || ''
+      notes: order.notes || '',
+      scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
     });
     setEditingId(order.id);
     setShowForm(true);
@@ -93,7 +96,7 @@ function Orders() {
     setShowForm(false);
     setEditingId(null);
     setShowCustomerForm(false);
-    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '' });
+    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '', scheduled_date: '' });
   };
 
   const handleCustomerChange = (customerId) => {
@@ -231,6 +234,12 @@ function Orders() {
             placeholder="Notes"
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          />
+          <input
+            type="date"
+            placeholder="Scheduled Date"
+            value={formData.scheduled_date}
+            onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
           />
           <div className="form-actions">
             <button type="submit" className="btn-primary">
