@@ -691,6 +691,12 @@ body {
   font-weight: 500;
 }
 
+.history-order-items {
+  font-size: 0.8rem;
+  color: #666;
+  margin: 0.25rem 0;
+}
+
 .history-order-details {
   display: flex;
   justify-content: space-between;

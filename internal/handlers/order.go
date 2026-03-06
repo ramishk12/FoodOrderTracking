@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/models"
@@ -88,6 +90,33 @@ func GetOrdersByCustomer(c *gin.Context) {
 		var o models.Order
 		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
 			orders = append(orders, o)
+		}
+	}
+
+	// Get order items for each order
+	for i := range orders {
+		itemRows, err := database.DB.Query(`
+			SELECT oi.quantity, i.name
+			FROM order_items oi
+			JOIN items i ON oi.item_id = i.id
+			WHERE oi.order_id = $1
+		`, orders[i].ID)
+		if err != nil {
+			continue
+		}
+
+		var items []string
+		for itemRows.Next() {
+			var qty int
+			var name string
+			if err := itemRows.Scan(&qty, &name); err == nil {
+				items = append(items, fmt.Sprintf("%dx %s", qty, name))
+			}
+		}
+		itemRows.Close()
+
+		if len(items) > 0 {
+			orders[i].Items = strings.Join(items, ", ")
 		}
 	}
 

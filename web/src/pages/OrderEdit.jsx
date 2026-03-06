@@ -283,6 +283,9 @@ function OrderEdit() {
                       <span className="order-id">Order #{order.id}</span>
                       <span className={`status-badge status-${order.status}`}>{order.status}</span>
                     </div>
+                    {order.items && (
+                      <div className="history-order-items">{order.items}</div>
+                    )}
                     <div className="history-order-details">
                       <span>{new Date(order.created_at).toLocaleDateString()}</span>
                       <span className="order-total">${order.total_amount}</span>
