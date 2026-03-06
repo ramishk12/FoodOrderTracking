@@ -88,11 +88,11 @@ function Items() {
     }));
 
     try {
-      // Convert datetime-local to ISO string treating it as UTC
-      // datetime-local format: "2026-03-05T10:30" should be treated as "2026-03-05T10:30Z"
+      // Convert datetime-local to RFC3339 ISO string treating it as UTC
+      // datetime-local format: "2026-03-05T10:30" needs to be "2026-03-05T10:30:00Z" for RFC3339
       let scheduledDateISO = null;
       if (orderForm.scheduled_date) {
-        scheduledDateISO = orderForm.scheduled_date + 'Z';
+        scheduledDateISO = orderForm.scheduled_date + ':00Z';
       }
       
       await api.createOrder({
