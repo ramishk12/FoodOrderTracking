@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import Home from './pages/Home'
+import Dashboard from './pages/Dashboard'
 import Orders from './pages/Orders'
 import OrderEdit from './pages/OrderEdit'
 import Customers from './pages/Customers'
@@ -15,6 +16,7 @@ function Navbar() {
   
   const links = [
     { path: '/', label: 'Home' },
+    { path: '/dashboard', label: 'Dashboard' },
     { path: '/items', label: 'Menu' },
     { path: '/orders', label: 'Orders' },
     { path: '/customers', label: 'Customers' },
@@ -45,6 +47,7 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/items" element={<Items />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/:id/edit" element={<OrderEditWrapper />} />
