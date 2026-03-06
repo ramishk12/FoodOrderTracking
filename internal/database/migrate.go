@@ -25,17 +25,17 @@ func Migrate() error {
 			created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
 			updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 		)`,
-		`CREATE TABLE IF NOT EXISTS orders (
-			id SERIAL PRIMARY KEY,
-			customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
-			delivery_address TEXT NOT NULL,
-			status VARCHAR(50) DEFAULT 'pending',
-			total_amount DECIMAL(10,2) NOT NULL,
-			notes TEXT,
-			scheduled_date TIMESTAMP,
-			created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
-			updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
-		)`,
+	`CREATE TABLE IF NOT EXISTS orders (
+		id SERIAL PRIMARY KEY,
+		customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+		delivery_address TEXT NOT NULL,
+		status VARCHAR(50) DEFAULT 'pending',
+		total_amount DECIMAL(10,2) NOT NULL,
+		notes TEXT,
+		scheduled_date TIMESTAMP WITH TIME ZONE,
+		created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
+		updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+	)`,
 		`CREATE TABLE IF NOT EXISTS order_items (
 			id SERIAL PRIMARY KEY,
 			order_id INTEGER REFERENCES orders(id) ON DELETE CASCADE,
@@ -66,7 +66,8 @@ func Migrate() error {
 		BEFORE UPDATE ON items
 		FOR EACH ROW
 		EXECUTE FUNCTION update_updated_at_column()`,
-		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP WITH TIME ZONE`,
+		`ALTER TABLE orders ALTER COLUMN scheduled_date TYPE TIMESTAMP WITH TIME ZONE`,
 	}
 
 	for _, migration := range migrations {

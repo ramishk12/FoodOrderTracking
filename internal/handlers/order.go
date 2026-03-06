@@ -271,6 +271,7 @@ func CreateOrder(c *gin.Context) {
 	}
 
 	var orderID int
+	// Ensure scheduled_date is in UTC (frontend sends datetime-local as UTC ISO string)
 	scheduledDateUTC := input.ScheduledDate
 	if scheduledDateUTC != nil {
 		*scheduledDateUTC = scheduledDateUTC.UTC()
@@ -337,6 +338,7 @@ func UpdateOrder(c *gin.Context) {
 	defer tx.Rollback()
 
 	// Update order details
+	// Ensure scheduled_date is in UTC (frontend sends datetime-local as UTC ISO string)
 	scheduledDateUTC := input.ScheduledDate
 	if scheduledDateUTC != nil {
 		*scheduledDateUTC = scheduledDateUTC.UTC()
