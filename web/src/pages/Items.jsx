@@ -12,6 +12,8 @@ function Items() {
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [customerOrderHistory, setCustomerOrderHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [orderForm, setOrderForm] = useState({
     customer_id: '',
     delivery_address: '',
@@ -65,13 +67,29 @@ function Items() {
     return items.filter(item => quantities[item.id] > 0);
   };
 
-  const handleCustomerChange = (customerId) => {
+  const handleCustomerChange = async (customerId) => {
     const customer = customers.find(c => c.id === parseInt(customerId));
     setOrderForm(prev => ({
       ...prev,
       customer_id: customerId,
       delivery_address: customer?.address || prev.delivery_address
     }));
+    
+    // Fetch customer order history
+    if (customerId) {
+      try {
+        setLoadingHistory(true);
+        const orders = await api.getOrdersByCustomer(customerId);
+        setCustomerOrderHistory(orders || []);
+      } catch (err) {
+        console.error('Error fetching order history:', err);
+        setCustomerOrderHistory([]);
+      } finally {
+        setLoadingHistory(false);
+      }
+    } else {
+      setCustomerOrderHistory([]);
+    }
   };
 
   const handleCreateOrder = async (e) => {
@@ -314,6 +332,41 @@ function Items() {
           </div>
           <button type="submit" className="btn-primary">Place Order</button>
         </form>
+      )}
+
+      {showOrderForm && orderForm.customer_id && (
+        <div className="order-history-panel">
+          <h3>Customer Order History</h3>
+          {loadingHistory ? (
+            <p className="loading">Loading order history...</p>
+          ) : customerOrderHistory.length === 0 ? (
+            <p className="empty">No previous orders for this customer</p>
+          ) : (
+            <div className="order-history-list">
+              {customerOrderHistory.map((order) => (
+                <div key={order.id} className="history-order-card">
+                  <div className="history-order-header">
+                    <span className="order-id">Order #{order.id}</span>
+                    <span className="order-date">
+                      {new Date(order.created_at).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        year: 'numeric' 
+                      })}
+                    </span>
+                  </div>
+                  <div className="history-order-items">
+                    {order.items || 'No items'}
+                  </div>
+                  <div className="history-order-footer">
+                    <span className="order-total">${order.total_amount.toFixed(2)}</span>
+                    <span className="order-status">{order.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {Object.entries(groupedItems).map(([category, categoryItems]) => (
