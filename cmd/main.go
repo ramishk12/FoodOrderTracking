@@ -59,6 +59,7 @@ func main() {
 		orders := api.Group("/orders")
 		{
 			orders.GET("", handlers.GetOrders)
+			orders.GET("/scheduled", handlers.GetScheduledOrders)
 			orders.GET("/customer/:customerId", handlers.GetOrdersByCustomer)
 			orders.GET("/:id", handlers.GetOrder)
 			orders.POST("", handlers.CreateOrder)
