@@ -220,7 +220,8 @@ function Orders() {
                       status: e.target.value,
                       total_amount: order.total_amount,
                       notes: order.notes,
-                      payment_method: order.payment_method
+                      payment_method: order.payment_method,
+                      scheduled_date: order.scheduled_date
                     });
                     loadData();
                   } catch (err) {
