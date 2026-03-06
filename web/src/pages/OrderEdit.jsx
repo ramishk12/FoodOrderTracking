@@ -74,6 +74,17 @@ function OrderEdit() {
       }
       setOrderItems(itemQuantities);
       
+      // Load customer's order history if customer is assigned
+      if (orderData.customer_id) {
+        try {
+          const orders = await api.getOrdersByCustomer(orderData.customer_id);
+          setCustomerOrders(orders.filter(o => o.id !== parseInt(id)));
+          setShowOrderHistory(true);
+        } catch (err) {
+          console.error('Error fetching customer orders:', err);
+        }
+      }
+      
     } catch (err) {
       setError(err.message);
     } finally {
@@ -115,7 +126,7 @@ function OrderEdit() {
     if (customerId) {
       try {
         const orders = await api.getOrdersByCustomer(customerId);
-        setCustomerOrders(orders.filter(o => o.id !== parseInt(id)));
+        setCustomerOrders(orders.filter(o => o.id !== parseInt(id) || isNaN(parseInt(id))));
         setShowOrderHistory(true);
       } catch (err) {
         console.error('Error fetching customer orders:', err);
