@@ -178,13 +178,20 @@ function OrderEdit() {
     try {
       const selectedItems = getSelectedItems();
       
+      // Convert datetime-local to ISO string treating it as UTC
+      // datetime-local format: "2026-03-05T10:30" should be treated as "2026-03-05T10:30Z"
+      let scheduledDateISO = null;
+      if (formData.scheduled_date) {
+        scheduledDateISO = formData.scheduled_date + 'Z';
+      }
+      
       // Update order with new data
       await api.updateOrder(parseInt(id), {
         customer_id: parseInt(formData.customer_id) || null,
         delivery_address: formData.delivery_address,
         notes: formData.notes,
         total_amount: calculateTotal(),
-        scheduled_date: formData.scheduled_date ? new Date(formData.scheduled_date).toISOString() : null,
+        scheduled_date: scheduledDateISO,
         items: selectedItems // Backend will handle updating order_items table
       });
       
