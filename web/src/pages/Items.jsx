@@ -109,6 +109,8 @@ function Items() {
     try {
       // Convert datetime-local to RFC3339 ISO string treating it as UTC
       // datetime-local format: "2026-03-05T10:30" needs to be "2026-03-05T10:30:00Z" for RFC3339
+      // Note: datetime-local input always represents the time as entered (no timezone conversion)
+      // We treat this as UTC time and append 'Z' to indicate UTC storage
       let scheduledDateISO = null;
       if (orderForm.scheduled_date) {
         scheduledDateISO = orderForm.scheduled_date + ':00Z';

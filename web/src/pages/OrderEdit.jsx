@@ -60,12 +60,20 @@ function OrderEdit() {
       setItems(itemsData);
       
       // Initialize form data with existing order values
+      // Extract datetime-local from ISO string (YYYY-MM-DDTHH:mm)
+      // The database stores in UTC, so we use the UTC time directly in datetime-local
+      let localScheduledDate = '';
+      if (orderData.scheduled_date) {
+        // Remove 'Z' suffix if present and take first 16 chars (YYYY-MM-DDTHH:mm)
+        localScheduledDate = orderData.scheduled_date.replace('Z', '').slice(0, 16);
+      }
+      
       setFormData({
         customer_id: orderData.customer_id ? String(orderData.customer_id) : '',
         delivery_address: orderData.delivery_address || '',
         notes: orderData.notes || '',
         payment_method: orderData.payment_method || 'cash',
-        scheduled_date: orderData.scheduled_date ? orderData.scheduled_date.slice(0, 16) : ''
+        scheduled_date: localScheduledDate
       });
       
       // Convert order items array to object for easy quantity management
@@ -180,12 +188,14 @@ function OrderEdit() {
     try {
       const selectedItems = getSelectedItems();
       
-      // Convert datetime-local to RFC3339 ISO string treating it as UTC
-      // datetime-local format: "2026-03-05T10:30" needs to be "2026-03-05T10:30:00Z" for RFC3339
-      let scheduledDateISO = null;
-      if (formData.scheduled_date) {
-        scheduledDateISO = formData.scheduled_date + ':00Z';
-      }
+       // Convert datetime-local to RFC3339 ISO string treating it as UTC
+       // datetime-local format: "2026-03-05T10:30" needs to be "2026-03-05T10:30:00Z" for RFC3339
+       // Note: datetime-local input always represents the time as entered (no timezone conversion)
+       // We treat this as UTC time and append 'Z' to indicate UTC storage
+       let scheduledDateISO = null;
+       if (formData.scheduled_date) {
+         scheduledDateISO = formData.scheduled_date + ':00Z';
+       }
       
       // Update order with new data
       await api.updateOrder(parseInt(id), {
