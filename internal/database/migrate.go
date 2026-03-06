@@ -33,7 +33,7 @@ func Migrate() error {
 		total_amount DECIMAL(10,2) NOT NULL,
 		notes TEXT,
 		payment_method VARCHAR(50) DEFAULT 'cash',
-		scheduled_date TIMESTAMP WITH TIME ZONE,
+		scheduled_date TIMESTAMP,
 		created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
 		updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 	)`,
@@ -67,7 +67,7 @@ func Migrate() error {
 		BEFORE UPDATE ON items
 		FOR EACH ROW
 		EXECUTE FUNCTION update_updated_at_column()`,
-		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP WITH TIME ZONE`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`,
 	}
 
