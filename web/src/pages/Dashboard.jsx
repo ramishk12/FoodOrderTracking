@@ -87,7 +87,7 @@ function Dashboard() {
         <div className="dashboard-section">
           <h2>Orders by Status</h2>
           <div className="status-breakdown">
-            {Object.entries(stats.orders_by_status || {}).map(([status, count]) => (
+            {Object.entries(stats.orders_by_status || {}).filter(([status]) => status).map(([status, count]) => (
               <div key={status} className="status-row">
                 <span className={`status-badge status-${status}`}>{status}</span>
                 <span className="status-count">{count}</span>
