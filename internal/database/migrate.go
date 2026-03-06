@@ -69,8 +69,6 @@ func Migrate() error {
 		EXECUTE FUNCTION update_updated_at_column()`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP`,
 		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`,
-		`ALTER TABLE orders ALTER COLUMN scheduled_date TYPE TIMESTAMP`,
-		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`,
 	}
 
 	for _, migration := range migrations {
