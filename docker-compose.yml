@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: food-order-db
+    environment:
+      POSTGRES_DB: food_order_tracking
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - food-order-network
+
+  # Go Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: food-order-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: food_order_tracking
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+    networks:
+      - food-order-network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: food-order-frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - food-order-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  food-order-network:
+    driver: bridge
