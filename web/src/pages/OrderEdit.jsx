@@ -33,6 +33,10 @@ function OrderEdit() {
     address: ''
   });
 
+  // Customer order history
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
+
   // Load order, customers, and menu items on mount
   useEffect(() => {
     loadData();
@@ -99,13 +103,27 @@ function OrderEdit() {
   };
 
   // Handle customer selection change - auto-fill delivery address
-  const handleCustomerChange = (customerId) => {
+  const handleCustomerChange = async (customerId) => {
     const customer = customers.find(c => c.id === parseInt(customerId));
     setFormData(prev => ({
       ...prev,
       customer_id: customerId,
       delivery_address: customer?.address || prev.delivery_address
     }));
+
+    // Fetch customer's order history
+    if (customerId) {
+      try {
+        const orders = await api.getOrdersByCustomer(customerId);
+        setCustomerOrders(orders.filter(o => o.id !== parseInt(id)));
+        setShowOrderHistory(true);
+      } catch (err) {
+        console.error('Error fetching customer orders:', err);
+      }
+    } else {
+      setCustomerOrders([]);
+      setShowOrderHistory(false);
+    }
   };
 
   // Create new customer and select them
@@ -245,6 +263,34 @@ function OrderEdit() {
             <button type="button" className="btn-primary" onClick={handleCustomerSubmit}>
               Add Customer
             </button>
+          </div>
+        )}
+
+        {showOrderHistory && customerOrders.length > 0 && (
+          <div className="customer-order-history">
+            <button 
+              type="button"
+              className="collapsible"
+              onClick={() => setShowOrderHistory(!showOrderHistory)}
+            >
+              Order History ({customerOrders.length} orders)
+            </button>
+            {showOrderHistory && (
+              <div className="order-history-content">
+                {customerOrders.map(order => (
+                  <div key={order.id} className="history-order-item">
+                    <div className="history-order-info">
+                      <span className="order-id">Order #{order.id}</span>
+                      <span className={`status-badge status-${order.status}`}>{order.status}</span>
+                    </div>
+                    <div className="history-order-details">
+                      <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                      <span className="order-total">${order.total_amount}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

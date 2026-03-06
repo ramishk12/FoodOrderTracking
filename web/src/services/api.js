@@ -43,6 +43,7 @@ export const api = {
   deleteItem: (id) => request(`/items/${id}`, { method: 'DELETE' }),
 
   getOrders: () => request('/orders'),
+  getOrdersByCustomer: (customerId) => request(`/orders/customer/${customerId}`),
   getOrder: (id) => request(`/orders/${id}`),
   createOrder: (data) => request('/orders', { method: 'POST', body: data }),
   updateOrder: (id, data) => request(`/orders/${id}`, { method: 'PUT', body: data }),

@@ -61,6 +61,39 @@ func GetOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, orders)
 }
 
+func GetOrdersByCustomer(c *gin.Context) {
+	customerID, err := strconv.Atoi(c.Param("customerId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID"})
+		return
+	}
+
+	rows, err := database.DB.Query(`
+		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.created_at, o.updated_at,
+		       COALESCE(c.name, ''), COALESCE(c.phone, '')
+		FROM orders o
+		LEFT JOIN customers c ON o.customer_id = c.id
+		WHERE o.customer_id = $1
+		ORDER BY o.created_at DESC
+		LIMIT 10
+	`, customerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var orders []models.Order
+	for rows.Next() {
+		var o models.Order
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
+			orders = append(orders, o)
+		}
+	}
+
+	c.JSON(http.StatusOK, orders)
+}
+
 func GetOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
