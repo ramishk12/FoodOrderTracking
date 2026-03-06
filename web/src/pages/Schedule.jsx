@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { getOrderDateStatus, formatDateInPST } from '../utils/dateUtils';
 
 function Schedule() {
   const [orders, setOrders] = useState([]);
@@ -34,10 +35,16 @@ function Schedule() {
     orders.forEach(order => {
       if (!order.scheduled_date) return;
       
+      // Convert to PST timezone for grouping
       const scheduledDate = new Date(order.scheduled_date);
-      scheduledDate.setHours(0, 0, 0, 0);
+      const pstDateStr = scheduledDate.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+      const scheduledDatePST = new Date(pstDateStr);
+      scheduledDatePST.setHours(0, 0, 0, 0);
       
-      const diffDays = Math.floor((scheduledDate - today) / (1000 * 60 * 60 * 24));
+      const todayPST = new Date(today.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+      todayPST.setHours(0, 0, 0, 0);
+      
+      const diffDays = Math.floor((scheduledDatePST - todayPST) / (1000 * 60 * 60 * 24));
       
       let label;
       if (diffDays < 0) {
@@ -49,7 +56,7 @@ function Schedule() {
       } else if (diffDays <= 7) {
         label = 'This Week';
       } else {
-        label = scheduledDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        label = scheduledDatePST.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short', month: 'short', day: 'numeric' });
       }
 
       if (!groups[label]) {

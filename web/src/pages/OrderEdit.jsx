@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatDateInPST } from '../utils/dateUtils';
 
 function OrderEdit() {
   // Get order ID from URL params
@@ -65,7 +66,7 @@ function OrderEdit() {
         delivery_address: orderData.delivery_address || '',
         notes: orderData.notes || '',
         payment_method: orderData.payment_method || 'cash',
-        scheduled_date: orderData.scheduled_date ? orderData.scheduled_date.slice(0, 16) : ''
+        scheduled_date: orderData.scheduled_date ? formatDateInPST(orderData.scheduled_date, 'datetime-local') : ''
       });
       
       // Convert order items array to object for easy quantity management
