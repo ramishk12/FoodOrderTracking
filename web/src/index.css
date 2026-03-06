@@ -1064,3 +1064,97 @@ body {
   color: #1e40af;
   text-transform: capitalize;
 }
+
+/* Orders Page - Collapsible Status Sections */
+.section-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.orders-by-status {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.status-section {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.status-section-header {
+  width: 100%;
+  padding: 1rem 1.5rem;
+  border: none;
+  background: #f9fafb;
+  border-left: 4px solid #ccc;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #374151;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.status-section-header:hover {
+  background: #f3f4f6;
+}
+
+.status-section-header:active {
+  transform: translateY(0);
+}
+
+.section-toggle {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  transition: transform 0.2s;
+  width: 20px;
+}
+
+.status-section-header:hover .section-toggle {
+  transform: scale(1.1);
+}
+
+.section-title {
+  flex: 1;
+  color: #374151;
+}
+
+.section-count {
+  background: #e5e7eb;
+  color: #374151;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.status-section-content {
+  padding: 1.5rem;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+  }
+}
+
+.empty-section {
+  text-align: center;
+  padding: 2rem;
+  color: #9ca3af;
+  font-style: italic;
+}
