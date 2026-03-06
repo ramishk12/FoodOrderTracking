@@ -638,3 +638,68 @@ body {
   color: #3b82f6;
   margin-right: 0.5rem;
 }
+
+/* Customer Order History */
+.customer-order-history {
+  margin-top: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.customer-order-history .collapsible {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border: none;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.customer-order-history .collapsible:hover {
+  background: #f3f4f6;
+}
+
+.order-history-content {
+  padding: 0.75rem;
+  background: #fff;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.history-order-item {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.history-order-item:last-child {
+  border-bottom: none;
+}
+
+.history-order-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.history-order-info .order-id {
+  font-weight: 500;
+}
+
+.history-order-items {
+  font-size: 0.8rem;
+  color: #666;
+  margin: 0.25rem 0;
+}
+
+.history-order-details {
+  display: flex;
+  justify-content: space-between;
+  color: #666;
+  font-size: 0.85rem;
+}
