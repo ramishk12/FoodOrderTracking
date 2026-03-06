@@ -32,7 +32,7 @@ func Migrate() error {
 			status VARCHAR(50) DEFAULT 'pending',
 			total_amount DECIMAL(10,2) NOT NULL,
 			notes TEXT,
-			scheduled_date DATE,
+			scheduled_date TIMESTAMP,
 			created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
 			updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 		)`,
@@ -66,7 +66,7 @@ func Migrate() error {
 		BEFORE UPDATE ON items
 		FOR EACH ROW
 		EXECUTE FUNCTION update_updated_at_column()`,
-		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date DATE`,
+		`ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_date TIMESTAMP`,
 	}
 
 	for _, migration := range migrations {

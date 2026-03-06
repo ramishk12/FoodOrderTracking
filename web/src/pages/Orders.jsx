@@ -236,8 +236,7 @@ function Orders() {
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
           />
           <input
-            type="date"
-            placeholder="Scheduled Date"
+            type="datetime-local"
             value={formData.scheduled_date}
             onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
           />
@@ -280,7 +279,7 @@ function Orders() {
               <p><strong>Total:</strong> ${order.total_amount}</p>
               {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
               {order.scheduled_date && (
-                <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
+                <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               )}
               <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}</p>
               {order.updated_at && order.updated_at !== order.created_at && (

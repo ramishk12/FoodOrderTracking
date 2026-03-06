@@ -292,7 +292,7 @@ function Items() {
             onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
           />
           <input
-            type="date"
+            type="datetime-local"
             value={orderForm.scheduled_date}
             onChange={(e) => setOrderForm({ ...orderForm, scheduled_date: e.target.value })}
           />

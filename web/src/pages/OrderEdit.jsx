@@ -63,7 +63,7 @@ function OrderEdit() {
         customer_id: orderData.customer_id ? String(orderData.customer_id) : '',
         delivery_address: orderData.delivery_address || '',
         notes: orderData.notes || '',
-        scheduled_date: orderData.scheduled_date ? orderData.scheduled_date.split('T')[0] : ''
+        scheduled_date: orderData.scheduled_date ? orderData.scheduled_date.slice(0, 16) : ''
       });
       
       // Convert order items array to object for easy quantity management
@@ -332,9 +332,9 @@ function OrderEdit() {
         </div>
 
         <div className="form-group">
-          <label>Scheduled Date</label>
+          <label>Scheduled Date & Time</label>
           <input
-            type="date"
+            type="datetime-local"
             value={formData.scheduled_date}
             onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
           />

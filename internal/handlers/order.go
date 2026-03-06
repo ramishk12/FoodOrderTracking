@@ -71,18 +71,18 @@ func GetScheduledOrders(c *gin.Context) {
 		days = 7
 	}
 
-	today := time.Now().Truncate(24 * time.Hour)
-	endDate := today.AddDate(0, 0, days)
+	now := time.Now()
+	endDate := now.AddDate(0, 0, days)
 
 	rows, err := database.DB.Query(`
 		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.scheduled_date, o.created_at, o.updated_at,
 		       COALESCE(c.name, ''), COALESCE(c.phone, '')
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
-		WHERE o.scheduled_date IS NOT NULL AND o.scheduled_date >= $1::DATE AND o.scheduled_date <= $2::DATE
+		WHERE o.scheduled_date IS NOT NULL AND o.scheduled_date >= $1 AND o.scheduled_date <= $2
 		AND o.status NOT IN ('delivered', 'cancelled')
 		ORDER BY o.scheduled_date ASC
-	`, today.Format("2006-01-02"), endDate.Format("2006-01-02"))
+	`, now, endDate)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
