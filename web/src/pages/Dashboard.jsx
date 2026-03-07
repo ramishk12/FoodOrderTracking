@@ -36,43 +36,43 @@ function Dashboard() {
       <div className="dashboard-grid">
         <div className="stat-card">
           <h3>Total Revenue</h3>
-          <p className="stat-value">${stats.total_revenue?.toFixed(2)}</p>
+          <p className="stat-value">${stats?.total_revenue?.toFixed(2) || '0.00'}</p>
           <p className="stat-label">All Time</p>
         </div>
 
         <div className="stat-card">
           <h3>Monthly Revenue</h3>
-          <p className="stat-value">${stats.monthly_revenue?.toFixed(2)}</p>
+          <p className="stat-value">${stats?.monthly_revenue?.toFixed(2) || '0.00'}</p>
           <p className="stat-label">This Month</p>
         </div>
 
         <div className="stat-card">
           <h3>Daily Revenue</h3>
-          <p className="stat-value">${stats.daily_revenue?.toFixed(2)}</p>
+          <p className="stat-value">${stats?.daily_revenue?.toFixed(2) || '0.00'}</p>
           <p className="stat-label">Today</p>
         </div>
 
         <div className="stat-card">
           <h3>Total Orders</h3>
-          <p className="stat-value">{stats.total_orders}</p>
+          <p className="stat-value">{stats?.total_orders || 0}</p>
           <p className="stat-label">All Time</p>
         </div>
 
         <div className="stat-card">
           <h3>Monthly Orders</h3>
-          <p className="stat-value">{stats.monthly_orders}</p>
+          <p className="stat-value">{stats?.monthly_orders || 0}</p>
           <p className="stat-label">This Month</p>
         </div>
 
         <div className="stat-card">
           <h3>Daily Orders</h3>
-          <p className="stat-value">{stats.daily_orders}</p>
+          <p className="stat-value">{stats?.daily_orders || 0}</p>
           <p className="stat-label">Today</p>
         </div>
 
         <div className="stat-card">
           <h3>Average Order Value</h3>
-          <p className="stat-value">${stats.average_order_value?.toFixed(2)}</p>
+          <p className="stat-value">${stats?.average_order_value?.toFixed(2) || '0.00'}</p>
           <p className="stat-label">Per Order</p>
         </div>
 
