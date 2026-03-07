@@ -57,10 +57,15 @@ function Orders() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const amount = parseFloat(formData.total_amount);
+      if (isNaN(amount) || amount <= 0) {
+        alert('Please enter a valid total amount');
+        return;
+      }
       const data = {
         ...formData,
         customer_id: parseInt(formData.customer_id) || null,
-        total_amount: parseFloat(formData.total_amount),
+        total_amount: amount,
         status: 'pending',
         scheduled_date: formData.scheduled_date ? formData.scheduled_date + ':00Z' : null
       };
