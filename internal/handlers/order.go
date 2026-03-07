@@ -52,6 +52,8 @@ func GetOrders(c *gin.Context) {
 			var oi models.OrderItem
 			if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
 				orderItems = append(orderItems, oi)
+			} else {
+				log.Printf("Error scanning order item for order %d: %v", orders[i].ID, err)
 			}
 		}
 		itemRows.Close()
@@ -112,6 +114,8 @@ func GetScheduledOrders(c *gin.Context) {
 			var oi models.OrderItem
 			if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
 				orderItems = append(orderItems, oi)
+			} else {
+				log.Printf("Error scanning order item for scheduled order: %v", err)
 			}
 		}
 		itemRows.Close()
@@ -169,6 +173,8 @@ func GetOrdersByCustomer(c *gin.Context) {
 			var oi models.OrderItem
 			if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
 				orderItems = append(orderItems, oi)
+			} else {
+				log.Printf("Error scanning order item for customer order: %v", err)
 			}
 		}
 		itemRows.Close()
@@ -216,6 +222,8 @@ func GetOrder(c *gin.Context) {
 		var oi models.OrderItem
 		if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
 			orderItems = append(orderItems, oi)
+		} else {
+			log.Printf("Error scanning order item: %v", err)
 		}
 	}
 	o.OrderItems = orderItems
