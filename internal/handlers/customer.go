@@ -106,6 +106,17 @@ func DeleteCustomer(c *gin.Context) {
 		return
 	}
 
+	var orderCount int
+	err = database.DB.QueryRow("SELECT COUNT(*) FROM orders WHERE customer_id = $1", id).Scan(&orderCount)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if orderCount > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete customer with existing orders"})
+		return
+	}
+
 	_, err = database.DB.Exec("DELETE FROM customers WHERE id = $1", id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
