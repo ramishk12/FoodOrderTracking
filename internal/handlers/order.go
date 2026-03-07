@@ -256,6 +256,11 @@ func CreateOrder(c *gin.Context) {
 	}
 	defer tx.Rollback()
 
+	if len(input.Items) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "At least one item is required"})
+		return
+	}
+
 	var totalAmount float64
 	for _, item := range input.Items {
 		if item.Quantity <= 0 {
