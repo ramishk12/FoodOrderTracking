@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -26,6 +27,8 @@ func GetItems(c *gin.Context) {
 		var i models.Item
 		if err := rows.Scan(&i.ID, &i.Name, &i.Description, &i.Price, &i.Category, &i.Available, &i.CreatedAt, &i.UpdatedAt); err == nil {
 			items = append(items, i)
+		} else {
+			log.Printf("Error scanning item: %v", err)
 		}
 	}
 
