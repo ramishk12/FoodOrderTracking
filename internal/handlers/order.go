@@ -31,6 +31,8 @@ func GetOrders(c *gin.Context) {
 		var o models.Order
 		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.PaymentMethod, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
 			orders = append(orders, o)
+		} else {
+			log.Printf("Error scanning order: %v", err)
 		}
 	}
 
