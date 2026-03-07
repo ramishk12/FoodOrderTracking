@@ -280,6 +280,7 @@ func CreateOrder(c *gin.Context) {
 	}
 
 	var totalAmount float64
+	itemPrices := make(map[int]float64)
 	for _, item := range input.Items {
 		if item.Quantity <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Quantity must be greater than 0"})
@@ -291,6 +292,7 @@ func CreateOrder(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item"})
 			return
 		}
+		itemPrices[item.ItemID] = price
 		totalAmount += price * float64(item.Quantity)
 	}
 
@@ -311,8 +313,7 @@ func CreateOrder(c *gin.Context) {
 	}
 
 	for _, item := range input.Items {
-		var price float64
-		tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&price)
+		price := itemPrices[item.ItemID]
 		subtotal := price * float64(item.Quantity)
 
 		_, err = tx.Exec(`
