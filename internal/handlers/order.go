@@ -368,6 +368,15 @@ func UpdateOrder(c *gin.Context) {
 		return
 	}
 
+	if input.CustomerID > 0 {
+		var exists bool
+		err := database.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM customers WHERE id = $1)", input.CustomerID).Scan(&exists)
+		if err != nil || !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Customer not found"})
+			return
+		}
+	}
+
 	tx, err := database.DB.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
