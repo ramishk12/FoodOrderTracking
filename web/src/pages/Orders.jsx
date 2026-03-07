@@ -41,8 +41,12 @@ function Orders() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const ordersData = await api.getOrders();
+      const [ordersData, customersData] = await Promise.all([
+        api.getOrders(),
+        api.getCustomers()
+      ]);
       setOrders(ordersData);
+      setCustomers(customersData);
     } catch (err) {
       setError(err.message);
     } finally {
