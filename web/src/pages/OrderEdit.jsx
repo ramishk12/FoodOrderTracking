@@ -95,9 +95,10 @@ function OrderEdit() {
       // Load customer's order history if customer is assigned
       if (orderData.customer_id) {
         try {
-          const orderId = parseInt(id);
+          const parsedOrderId = parseInt(id);
+          const orderId = isNaN(parsedOrderId) ? null : parsedOrderId;
           const orders = await api.getOrdersByCustomer(orderData.customer_id);
-          setCustomerOrders(orders.filter(o => o.id !== orderId && !isNaN(orderId)));
+          setCustomerOrders(orders.filter(o => orderId === null || o.id !== orderId));
           setShowOrderHistory(true);
         } catch (err) {
           console.error('Error fetching customer orders:', err);
