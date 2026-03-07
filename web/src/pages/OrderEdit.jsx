@@ -339,8 +339,8 @@ function OrderEdit() {
                       </div>
                     )}
                     <div className="history-order-details">
-                      <span>{new Date(order.created_at).toLocaleDateString()}</span>
-                      <span className="order-total">${order.total_amount}</span>
+                      <span>{order.created_at ? new Date(order.created_at).toLocaleDateString() : 'N/A'}</span>
+                      <span className="order-total">${order.total_amount ? order.total_amount.toFixed(2) : '0.00'}</span>
                     </div>
                   </div>
                 ))}
