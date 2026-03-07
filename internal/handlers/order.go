@@ -437,11 +437,26 @@ func DeleteOrder(c *gin.Context) {
 		return
 	}
 
-	_, err = database.DB.Exec("DELETE FROM orders WHERE id = $1", id)
+	tx, err := database.DB.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec("DELETE FROM order_items WHERE order_id = $1", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err = tx.Exec("DELETE FROM orders WHERE id = $1", id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	tx.Commit()
 
 	c.JSON(http.StatusOK, gin.H{"message": "Order deleted"})
 }
