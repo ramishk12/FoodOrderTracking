@@ -59,6 +59,11 @@ func CreateCustomer(c *gin.Context) {
 		return
 	}
 
+	if input.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
+		return
+	}
+
 	var id int
 	err := database.DB.QueryRow(`
 		INSERT INTO customers (name, phone, email, address)
@@ -84,6 +89,11 @@ func UpdateCustomer(c *gin.Context) {
 	var input models.Customer
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if input.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
 		return
 	}
 
