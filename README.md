@@ -181,12 +181,78 @@ For detailed instructions, see [QUICK_START.md](QUICK_START.md)
 
 ## Features
 
-- **Home Page**: Navigation to all sections
-- **Orders Page**: View, create, edit, delete orders; update status; filter by status
-- **Order Edit Page**: Edit order details and items with full quantity management
-- **Customers Page**: Manage customer database; add, edit, delete customers
-- **Menu Items Page**: Manage menu items; add, edit, delete items; set availability by category
-- **Search/Filter**: Search orders by customer name; filter orders by status
+### Orders Management
+- **View Orders**: Display all orders in a responsive card grid layout
+- **Create Orders**: Add new orders with customer selection and items
+- **Edit Orders**: Modify order details and item quantities on dedicated edit page
+- **Delete Orders**: Remove orders from the system
+- **Update Status**: Change order status (pending → preparing → ready → delivered/cancelled)
+- **Collapsible Sections** ⭐ NEW: Orders grouped by status with expand/collapse functionality
+  - Default expanded: pending, preparing, ready
+  - Default collapsed: delivered, cancelled
+  - Order count badges per section
+  - Expand All / Collapse All buttons
+- **Search**: Find orders by customer name or delivery address
+- **Filter by Status**: View orders in specific status categories
+- **Filter by Payment Method**: Filter orders by Cash or e-Transfer
+
+### Customers Management
+- **View Customers**: List all customers with contact information
+- **Create Customers**: Add new customers to the database
+- **Edit Customers**: Update customer information
+- **Delete Customers**: Remove customers from the system
+- **Customer History**: View order history for each customer on the Items page
+
+### Menu Items Management
+- **View Menu Items**: Display all menu items organized by category
+- **Create Items**: Add new menu items with price, description, and category
+- **Edit Items**: Update item details
+- **Delete Items**: Remove items from the menu
+- **Availability Control**: Toggle item availability by category
+- **Category Organization**: Items grouped by category (starters, mains, desserts, drinks, etc.)
+
+### Dashboard & Analytics
+- **Dashboard Page**: View key metrics and statistics
+  - Total orders count
+  - Orders by status breakdown
+  - Top menu items by quantity ordered
+  - Top customers by total spent
+  - Sales chart by day
+- **Real-time Statistics**: Auto-refreshing dashboard data
+
+### Order Scheduling
+- **Scheduled Orders**: Schedule orders for future delivery
+- **Schedule View**: View upcoming orders by date
+- **Timezone Support**: Proper UTC timezone handling with timezone conversion
+- **Schedule Filtering**: Filter orders by scheduled date
+
+### Payment Methods
+- **Cash Payment**: Option for cash on delivery
+- **e-Transfer Payment**: Option for e-Transfer payment
+- **Payment Filtering**: Filter and track orders by payment method
+- **Payment Display**: Show payment method on all order views
+
+### User Interface
+- **Responsive Design**: Mobile-friendly layout
+- **Navigation**: Easy navigation between all sections
+- **Search & Filter**: Quick access to find specific items
+- **Status Badges**: Color-coded status indicators
+  - Pending: Orange
+  - Preparing: Blue
+  - Ready: Purple
+  - Delivered: Green
+  - Cancelled: Red
+- **Card Grid Layout**: Clean, organized card-based presentation
+- **Forms & Modals**: Easy-to-use forms for data entry
+- **Real-time Updates**: Instant reflection of changes across pages
+
+### Technical Features
+- **RESTful API**: Clean REST API endpoints for all operations
+- **Error Handling**: Comprehensive error messages and handling
+- **Data Validation**: Input validation on both frontend and backend
+- **Automatic Timestamps**: Track creation and update times for all records
+- **Database Triggers**: Automatic updated_at timestamp management
+- **UTC Timezone Handling**: Consistent timezone management throughout the application
 
 ## Docker Deployment
 
