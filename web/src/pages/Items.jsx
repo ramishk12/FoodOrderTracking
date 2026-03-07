@@ -380,7 +380,7 @@ function Items() {
                       : 'No items'}
                   </div>
                   <div className="history-order-footer">
-                    <span className="order-total">${order.total_amount.toFixed(2)}</span>
+                    <span className="order-total">${order.total_amount ? order.total_amount.toFixed(2) : '0.00'}</span>
                     <span className="order-status">{order.status}</span>
                   </div>
                 </div>
