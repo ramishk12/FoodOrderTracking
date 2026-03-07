@@ -90,7 +90,7 @@ function Orders() {
       delivery_address: order.delivery_address || '',
       total_amount: String(order.total_amount) || '',
       notes: order.notes,
-                       payment_method: order.payment_method || '',
+      payment_method: order.payment_method || '',
       scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
     });
     setEditingId(order.id);
