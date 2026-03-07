@@ -59,6 +59,16 @@ func CreateItem(c *gin.Context) {
 		return
 	}
 
+	if input.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
+		return
+	}
+
+	if input.Category == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Category is required"})
+		return
+	}
+
 	if input.Price <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Price must be greater than 0"})
 		return
@@ -89,6 +99,16 @@ func UpdateItem(c *gin.Context) {
 	var input models.Item
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if input.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
+		return
+	}
+
+	if input.Category == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Category is required"})
 		return
 	}
 
