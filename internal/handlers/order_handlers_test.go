@@ -458,9 +458,6 @@ func TestCreateOrder(t *testing.T) {
 					WillReturnRows(sqlmock.NewRows([]string{"price"}).AddRow(12.99))
 				m.ExpectQuery("INSERT INTO orders").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
-				m.ExpectQuery("SELECT price FROM items WHERE id = \\$1").
-					WithArgs(1).
-					WillReturnRows(sqlmock.NewRows([]string{"price"}).AddRow(12.99))
 				m.ExpectExec("INSERT INTO order_items").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				m.ExpectCommit()
@@ -549,6 +546,9 @@ func TestUpdateOrder(t *testing.T) {
 			orderID: "1",
 			body:    `{"customer_id":1,"delivery_address":"123 Main St","status":"preparing","total_amount":30.00,"payment_method":"card","items":[{"item_id":1,"quantity":2}]}`,
 			setupMock: func(m sqlmock.Sqlmock, id, body string) {
+				m.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM customers WHERE id = \\$1\\)").
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 				m.ExpectBegin()
 				m.ExpectExec("UPDATE orders SET customer_id = \\$1, delivery_address = \\$2, status = \\$3, total_amount = \\$4, notes = \\$5, payment_method = \\$6, scheduled_date = \\$7, updated_at = CURRENT_TIMESTAMP WHERE id = \\$8").
 					WillReturnResult(sqlmock.NewResult(1, 1))
@@ -652,9 +652,14 @@ func TestDeleteOrder(t *testing.T) {
 			name:    "Deletes order successfully",
 			orderID: "1",
 			setupMock: func(m sqlmock.Sqlmock, id string) {
+				m.ExpectBegin()
+				m.ExpectExec("DELETE FROM order_items WHERE order_id = \\$1").
+					WithArgs(1).
+					WillReturnResult(sqlmock.NewResult(1, 1))
 				m.ExpectExec("DELETE FROM orders WHERE id = \\$1").
 					WithArgs(1).
 					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectCommit()
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -680,9 +685,11 @@ func TestDeleteOrder(t *testing.T) {
 			name:    "Returns 500 on database error",
 			orderID: "1",
 			setupMock: func(m sqlmock.Sqlmock, id string) {
-				m.ExpectExec("DELETE FROM orders WHERE id = \\$1").
+				m.ExpectBegin()
+				m.ExpectExec("DELETE FROM order_items WHERE order_id = \\$1").
 					WithArgs(1).
 					WillReturnError(fmt.Errorf("database error"))
+				m.ExpectRollback()
 			},
 			expectedStatus: http.StatusInternalServerError,
 			checkResponse:  nil,
@@ -691,9 +698,14 @@ func TestDeleteOrder(t *testing.T) {
 			name:    "Deletes non-existent order",
 			orderID: "999",
 			setupMock: func(m sqlmock.Sqlmock, id string) {
+				m.ExpectBegin()
+				m.ExpectExec("DELETE FROM order_items WHERE order_id = \\$1").
+					WithArgs(999).
+					WillReturnResult(sqlmock.NewResult(999, 0))
 				m.ExpectExec("DELETE FROM orders WHERE id = \\$1").
 					WithArgs(999).
 					WillReturnResult(sqlmock.NewResult(999, 0))
+				m.ExpectCommit()
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
