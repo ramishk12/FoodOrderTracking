@@ -130,7 +130,7 @@ func GetOrdersByCustomer(c *gin.Context) {
 	}
 
 	rows, err := database.DB.Query(`
-		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.payment_method, o.created_at, o.updated_at,
+		SELECT o.id, o.customer_id, o.delivery_address, o.status, o.total_amount, o.notes, o.payment_method, o.scheduled_date, o.created_at, o.updated_at,
 		       COALESCE(c.name, ''), COALESCE(c.phone, '')
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
@@ -147,7 +147,7 @@ func GetOrdersByCustomer(c *gin.Context) {
 	var orders []models.Order
 	for rows.Next() {
 		var o models.Order
-		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.PaymentMethod, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
+		if err := rows.Scan(&o.ID, &o.CustomerID, &o.DeliveryAddress, &o.Status, &o.TotalAmount, &o.Notes, &o.PaymentMethod, &o.ScheduledDate, &o.CreatedAt, &o.UpdatedAt, &o.CustomerName, &o.CustomerPhone); err == nil {
 			orders = append(orders, o)
 		}
 	}
