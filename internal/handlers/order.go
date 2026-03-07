@@ -258,6 +258,10 @@ func CreateOrder(c *gin.Context) {
 
 	var totalAmount float64
 	for _, item := range input.Items {
+		if item.Quantity <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Quantity must be greater than 0"})
+			return
+		}
 		var price float64
 		err := tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&price)
 		if err != nil {
@@ -367,7 +371,8 @@ func UpdateOrder(c *gin.Context) {
 		// Insert new order items
 		for _, item := range input.Items {
 			if item.Quantity <= 0 {
-				continue
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Quantity must be greater than 0"})
+				return
 			}
 			var unitPrice float64
 			err = tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&unitPrice)
