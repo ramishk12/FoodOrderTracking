@@ -331,8 +331,10 @@ function OrderEdit() {
                       <span className="order-id">Order #{order.id}</span>
                       <span className={`status-badge status-${order.status}`}>{order.status}</span>
                     </div>
-                    {order.items && (
-                      <div className="history-order-items">{order.items}</div>
+                    {order.order_items && order.order_items.length > 0 && (
+                      <div className="history-order-items">
+                        {order.order_items.map(item => `${item.quantity}x ${item.item_name}`).join(', ')}
+                      </div>
                     )}
                     <div className="history-order-details">
                       <span>{new Date(order.created_at).toLocaleDateString()}</span>
