@@ -85,7 +85,7 @@ func main() {
 			items.GET("/:id", handlers.GetItem)
 			items.POST("", handlers.CreateItem)
 			items.PUT("/:id", handlers.UpdateItem)
-			items.DELETE("/:id", handlers.DeleteItem)
+			items.DELETE("/:id", handlers.DeactivateItem)
 		}
 
 		orders := api.Group("/orders")

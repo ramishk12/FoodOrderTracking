@@ -109,7 +109,7 @@ func UpdateItem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Item updated"})
 }
 
-func DeleteItem(c *gin.Context) {
+func DeactivateItem(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item ID"})
