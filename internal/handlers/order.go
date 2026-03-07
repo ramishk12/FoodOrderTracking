@@ -1,11 +1,9 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"food-order-tracking/internal/database"
@@ -100,7 +98,7 @@ func GetScheduledOrders(c *gin.Context) {
 	// Get order items for each order
 	for i := range orders {
 		itemRows, err := database.DB.Query(`
-			SELECT oi.quantity, i.name
+			SELECT oi.id, oi.order_id, oi.item_id, i.name, oi.quantity, oi.unit_price, oi.subtotal
 			FROM order_items oi
 			JOIN items i ON oi.item_id = i.id
 			WHERE oi.order_id = $1
@@ -109,19 +107,16 @@ func GetScheduledOrders(c *gin.Context) {
 			continue
 		}
 
-		var items []string
+		var orderItems []models.OrderItem
 		for itemRows.Next() {
-			var qty int
-			var name string
-			if err := itemRows.Scan(&qty, &name); err == nil {
-				items = append(items, fmt.Sprintf("%dx %s", qty, name))
+			var oi models.OrderItem
+			if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
+				orderItems = append(orderItems, oi)
 			}
 		}
 		itemRows.Close()
 
-		if len(items) > 0 {
-			orders[i].Items = strings.Join(items, ", ")
-		}
+		orders[i].OrderItems = orderItems
 	}
 
 	c.JSON(http.StatusOK, orders)
@@ -160,7 +155,7 @@ func GetOrdersByCustomer(c *gin.Context) {
 	// Get order items for each order
 	for i := range orders {
 		itemRows, err := database.DB.Query(`
-			SELECT oi.quantity, i.name
+			SELECT oi.id, oi.order_id, oi.item_id, i.name, oi.quantity, oi.unit_price, oi.subtotal
 			FROM order_items oi
 			JOIN items i ON oi.item_id = i.id
 			WHERE oi.order_id = $1
@@ -169,19 +164,16 @@ func GetOrdersByCustomer(c *gin.Context) {
 			continue
 		}
 
-		var items []string
+		var orderItems []models.OrderItem
 		for itemRows.Next() {
-			var qty int
-			var name string
-			if err := itemRows.Scan(&qty, &name); err == nil {
-				items = append(items, fmt.Sprintf("%dx %s", qty, name))
+			var oi models.OrderItem
+			if err := itemRows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err == nil {
+				orderItems = append(orderItems, oi)
 			}
 		}
 		itemRows.Close()
 
-		if len(items) > 0 {
-			orders[i].Items = strings.Join(items, ", ")
-		}
+		orders[i].OrderItems = orderItems
 	}
 
 	c.JSON(http.StatusOK, orders)
@@ -353,7 +345,7 @@ func UpdateOrder(c *gin.Context) {
 	if scheduledDateUTC != nil {
 		*scheduledDateUTC = scheduledDateUTC.UTC()
 	}
-	
+
 	_, err = tx.Exec(`
 		UPDATE orders SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4, notes = $5, payment_method = $6, scheduled_date = $7, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $8

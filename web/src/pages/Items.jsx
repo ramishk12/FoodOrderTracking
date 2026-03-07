@@ -375,7 +375,9 @@ function Items() {
                     </span>
                   </div>
                   <div className="history-order-items">
-                    {order.items || 'No items'}
+                    {order.order_items && order.order_items.length > 0 
+                      ? order.order_items.map(item => `${item.quantity}x ${item.item_name}`).join(', ')
+                      : 'No items'}
                   </div>
                   <div className="history-order-footer">
                     <span className="order-total">${order.total_amount.toFixed(2)}</span>
