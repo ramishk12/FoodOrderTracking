@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -23,9 +24,11 @@ func GetCustomers(c *gin.Context) {
 
 	var customers []models.Customer
 	for rows.Next() {
-		var c models.Customer
-		if err := rows.Scan(&c.ID, &c.Name, &c.Phone, &c.Email, &c.Address, &c.CreatedAt, &c.UpdatedAt); err == nil {
-			customers = append(customers, c)
+		var cust models.Customer
+		if err := rows.Scan(&cust.ID, &cust.Name, &cust.Phone, &cust.Email, &cust.Address, &cust.CreatedAt, &cust.UpdatedAt); err == nil {
+			customers = append(customers, cust)
+		} else {
+			log.Printf("Error scanning customer: %v", err)
 		}
 	}
 
