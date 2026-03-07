@@ -10,17 +10,17 @@ import (
 )
 
 type DashboardStats struct {
-	TotalRevenue     float64           `json:"total_revenue"`
-	MonthlyRevenue   float64           `json:"monthly_revenue"`
-	DailyRevenue     float64           `json:"daily_revenue"`
-	TotalOrders     int                `json:"total_orders"`
-	MonthlyOrders   int                `json:"monthly_orders"`
-	DailyOrders     int                `json:"daily_orders"`
-	AverageOrderValue float64          `json:"average_order_value"`
-	OrdersByStatus  map[string]int     `json:"orders_by_status"`
-	BestSellingItems []BestSellingItem `json:"best_selling_items"`
-	TopCustomers    []TopCustomer       `json:"top_customers"`
-	SalesTrend      []SalesDataPoint    `json:"sales_trend"`
+	TotalRevenue      float64           `json:"total_revenue"`
+	MonthlyRevenue    float64           `json:"monthly_revenue"`
+	DailyRevenue      float64           `json:"daily_revenue"`
+	TotalOrders       int               `json:"total_orders"`
+	MonthlyOrders     int               `json:"monthly_orders"`
+	DailyOrders       int               `json:"daily_orders"`
+	AverageOrderValue float64           `json:"average_order_value"`
+	OrdersByStatus    map[string]int    `json:"orders_by_status"`
+	BestSellingItems  []BestSellingItem `json:"best_selling_items"`
+	TopCustomers      []TopCustomer     `json:"top_customers"`
+	SalesTrend        []SalesDataPoint  `json:"sales_trend"`
 }
 
 type BestSellingItem struct {
@@ -30,14 +30,14 @@ type BestSellingItem struct {
 }
 
 type TopCustomer struct {
-	Name      string  `json:"name"`
-	OrderCount int    `json:"order_count"`
+	Name       string  `json:"name"`
+	OrderCount int     `json:"order_count"`
 	TotalSpent float64 `json:"total_spent"`
 }
 
 type SalesDataPoint struct {
-	Date   string  `json:"date"`
-	Orders int     `json:"orders"`
+	Date    string  `json:"date"`
+	Orders  int     `json:"orders"`
 	Revenue float64 `json:"revenue"`
 }
 
@@ -102,8 +102,9 @@ func GetDashboardStats(c *gin.Context) {
 		defer itemRows.Close()
 		for itemRows.Next() {
 			var item BestSellingItem
-			itemRows.Scan(&item.Name, &item.Quantity, &item.Revenue)
-			stats.BestSellingItems = append(stats.BestSellingItems, item)
+			if err := itemRows.Scan(&item.Name, &item.Quantity, &item.Revenue); err == nil {
+				stats.BestSellingItems = append(stats.BestSellingItems, item)
+			}
 		}
 	}
 
@@ -121,8 +122,9 @@ func GetDashboardStats(c *gin.Context) {
 		defer customerRows.Close()
 		for customerRows.Next() {
 			var customer TopCustomer
-			customerRows.Scan(&customer.Name, &customer.OrderCount, &customer.TotalSpent)
-			stats.TopCustomers = append(stats.TopCustomers, customer)
+			if err := customerRows.Scan(&customer.Name, &customer.OrderCount, &customer.TotalSpent); err == nil {
+				stats.TopCustomers = append(stats.TopCustomers, customer)
+			}
 		}
 	}
 
@@ -134,11 +136,15 @@ func GetDashboardStats(c *gin.Context) {
 
 		var revenue float64
 		var orders int
-		database.DB.QueryRow(`
+		err := database.DB.QueryRow(`
 			SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
 			FROM orders
 			WHERE status != 'cancelled' AND created_at >= $1 AND created_at < $2
 		`, startOfDate, endOfDate).Scan(&revenue, &orders)
+		if err != nil {
+			revenue = 0
+			orders = 0
+		}
 
 		stats.SalesTrend = append(stats.SalesTrend, SalesDataPoint{
 			Date:    startOfDate.Format("2006-01-02"),
