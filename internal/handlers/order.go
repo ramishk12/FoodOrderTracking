@@ -249,6 +249,15 @@ func CreateOrder(c *gin.Context) {
 		input.PaymentMethod = "cash"
 	}
 
+	validStatuses := map[string]bool{
+		"pending": true, "preparing": true, "ready": true,
+		"delivered": true, "cancelled": true,
+	}
+	if input.Status != "" && !validStatuses[input.Status] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status"})
+		return
+	}
+
 	tx, err := database.DB.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -339,6 +348,15 @@ func UpdateOrder(c *gin.Context) {
 
 	if input.PaymentMethod == "" {
 		input.PaymentMethod = "cash"
+	}
+
+	validStatuses := map[string]bool{
+		"pending": true, "preparing": true, "ready": true,
+		"delivered": true, "cancelled": true,
+	}
+	if input.Status != "" && !validStatuses[input.Status] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status"})
+		return
 	}
 
 	tx, err := database.DB.Begin()
