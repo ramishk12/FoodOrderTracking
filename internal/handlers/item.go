@@ -59,6 +59,11 @@ func CreateItem(c *gin.Context) {
 		return
 	}
 
+	if input.Price <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Price must be greater than 0"})
+		return
+	}
+
 	var id int
 	err := database.DB.QueryRow(`
 		INSERT INTO items (name, description, price, category, available)
@@ -84,6 +89,11 @@ func UpdateItem(c *gin.Context) {
 	var input models.Item
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if input.Price <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Price must be greater than 0"})
 		return
 	}
 
