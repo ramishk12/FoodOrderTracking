@@ -7,9 +7,14 @@ on:
     branches: [ "main" ]
 
 jobs:
-  # Backend: Build and Test
+  # Backend: Build and Test - only on Go changes
   backend:
     runs-on: ubuntu-latest
+    if: |
+      contains(github.event.head_commit.modified, '.go') ||
+      contains(github.event.head_commit.modified, 'go.mod') ||
+      contains(github.event.head_commit.modified, 'go.sum') ||
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -27,9 +32,12 @@ jobs:
       - name: Test
         run: go test -v ./...
 
-  # Frontend: Build
+  # Frontend: Build - only on web changes
   frontend:
     runs-on: ubuntu-latest
+    if: |
+      contains(github.event.head_commit.modified, 'web/') ||
+      github.event_name == 'pull_request'
     defaults:
       run:
         working-directory: web
@@ -49,9 +57,14 @@ jobs:
       - name: Build
         run: npm run build
 
-  # Linting
+  # Linting - only on Go changes
   lint:
     runs-on: ubuntu-latest
+    if: |
+      contains(github.event.head_commit.modified, '.go') ||
+      contains(github.event.head_commit.modified, 'go.mod') ||
+      contains(github.event.head_commit.modified, 'go.sum') ||
+      github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -65,7 +78,7 @@ jobs:
           go install golang.org/x/lint/golint@latest
           golint -set_exit_status ./...
 
-  # Dependency Review
+  # Dependency Review - runs always
   dependency-review:
     runs-on: ubuntu-latest
     steps:
