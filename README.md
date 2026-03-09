@@ -49,13 +49,13 @@ FoodOrderTracking/
 
 ## Getting Started
 
-### Quick Start with Docker (Recommended - 5 minutes)
+### Quick Start with Docker (Recommended)
 
 **Prerequisites**: Docker Desktop for Windows
 
 1. Start the application:
    ```bash
-   cd F:\Development\FoodOrderTracking
+   cd F:\Development\FoodOrderTracking\deployment
    docker-compose up -d
    ```
 
@@ -68,7 +68,7 @@ FoodOrderTracking/
    docker-compose logs -f
    ```
 
-For detailed instructions, see [QUICK_START.md](QUICK_START.md)
+For detailed instructions, see [deployment/DOCKER_DEPLOYMENT.md](deployment/DOCKER_DEPLOYMENT.md)
 
 ### Traditional Setup (Local Development)
 
@@ -286,15 +286,14 @@ For detailed instructions, see [QUICK_START.md](QUICK_START.md)
 
 Complete Docker setup for local deployment with PostgreSQL, Go backend, and React frontend.
 
-### Files Included
+### Deployment Files (in `deployment/` folder)
+- `docker-compose.yml` - Services orchestration
 - `Dockerfile.backend` - Multi-stage build for Go backend
 - `Dockerfile.frontend` - Multi-stage build for React frontend with Nginx
-- `docker-compose.yml` - Services orchestration
 - `nginx.conf` - Nginx configuration
-- `QUICK_START.md` - Quick start guide
 - `DOCKER_DEPLOYMENT.md` - Full deployment documentation
 
-See [QUICK_START.md](QUICK_START.md) for details.
+See [deployment/DOCKER_DEPLOYMENT.md](deployment/DOCKER_DEPLOYMENT.md) for details.
 
 ## Configuration
 
