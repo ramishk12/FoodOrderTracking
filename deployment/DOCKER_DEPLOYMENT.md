@@ -321,6 +321,17 @@ docker-compose logs -f --timestamps
   docker-compose up -d
   ```
 
+### Quick Troubleshooting Reference
+
+| Issue | Solution |
+|-------|----------|
+| Docker not found | Install Docker Desktop for Windows |
+| Port already in use | Stop other services using ports 80, 8080, 5432 |
+| Can't connect to API | Wait 15s for backend to start, check `docker-compose logs backend` |
+| Database not ready | Check `docker-compose logs db`, restart with `docker-compose restart db` |
+| Frontend shows error | Clear browser cache, wait for backend to fully start |
+| Code changes not showing | Rebuild with `docker-compose up -d --build` |
+
 ## Service Management
 
 ### Restart Services
@@ -436,10 +447,64 @@ See `.github/workflows/ci.yml` for details.
 
 For 5 users on a local machine:
 
-- **Memory**: ~500MB RAM total
-- **CPU**: Minimal (< 5% at rest)
+- **Memory**: ~500MB total (~300MB DB, ~100MB backend, ~100MB frontend)
+- **CPU**: < 5% at idle, < 20% under load
+- **Storage**: ~2GB (mostly database capacity)
 - **Startup Time**: 15-20 seconds
 - **Response Time**: < 100ms typically
+
+## Key Features
+
+- **One Command Start** - `docker-compose up -d`
+- **Automatic Networking** - Services find each other automatically
+- **Database Persistence** - Data survives container restarts
+- **Health Checks** - Database readiness verified before backend starts
+- **Proper Logging** - All output captured for debugging
+- **Easy Code Updates** - Rebuild with `docker-compose up -d --build`
+- **Low Resource Usage** - ~500MB RAM total for 5 users
+
+## Docker vs Traditional Development
+
+### Traditional Development
+```
+Your Machine
+├── Go backend running directly (go run)
+├── Node dev server running directly (npm run dev)
+└── PostgreSQL running locally
+```
+
+### Docker Development
+```
+Your Machine
+└── Docker
+    ├── PostgreSQL container
+    ├── Go backend container
+    └── Nginx + React container
+```
+
+**Benefits:**
+- No dependency conflicts
+- Easier to share environment
+- Closer to production setup
+- Easy to start/stop/restart
+
+## Support Resources
+
+- Docker docs: https://docs.docker.com
+- Gin (Go framework): https://gin-gonic.com
+- React: https://react.dev
+- PostgreSQL: https://www.postgresql.org/docs
+- Nginx: https://nginx.org/en/docs
+
+## Success Checklist
+
+- Docker Desktop installed and running
+- Application starts with `docker-compose up -d`
+- Can access http://localhost
+- Can access http://localhost:8080/api/customers
+- Database shows data: `docker-compose exec db psql -U postgres -d food_order_tracking -c "SELECT COUNT(*) FROM customers;"`
+
+If all checks pass, you're ready to go!
 
 ## Getting Help
 
