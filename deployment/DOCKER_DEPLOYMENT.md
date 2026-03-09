@@ -26,7 +26,9 @@ FoodOrderTracking/
 ## Quick Start (Local Development)
 
 ### Prerequisites
-- Docker Desktop (Windows/Mac/Linux)
+- **Docker Desktop** (Windows/Mac/Linux)
+  - Download: https://www.docker.com/products/docker-desktop
+  - Includes Docker and docker-compose
 - Git
 
 ### Start All Services
@@ -60,6 +62,32 @@ docker-compose up -d
 # Remove everything including database
 docker-compose down -v
 ```
+
+## Architecture
+
+### How Communication Works
+
+```
+Browser (http://localhost)
+    ↓
+Nginx (port 80)
+    ├─→ Serves React SPA
+    └─→ Proxies /api/* to Backend (port 8080)
+        ↓
+    Go API (port 8080)
+        ↓
+    PostgreSQL (port 5432)
+```
+
+All three services run in a Docker network and communicate with each other internally.
+
+### Services Overview
+
+| Service | Port | Description |
+|---------|------|-------------|
+| PostgreSQL | 5432 | Database: `food_order_tracking`, User: `postgres`, Password: `postgres` |
+| Go Backend | 8080 | API endpoints at `/api/*` |
+| React Frontend | 80 | Served with Nginx, proxies API requests to backend |
 
 ## Production Deployment
 
@@ -269,6 +297,30 @@ docker-compose up -d
 docker-compose logs -f --timestamps
 ```
 
+### "Cannot connect to Docker daemon"
+- **Solution**: Start Docker Desktop and wait for it to fully load
+
+### "Frontend shows connection error"
+- **Solution**: Wait 10-15 seconds for backend to start and database to be ready
+- Check logs: `docker-compose logs backend`
+
+### "Database connection refused"
+1. Verify database is running:
+   ```bash
+   docker-compose logs db
+   ```
+2. Restart database:
+   ```bash
+   docker-compose restart db
+   ```
+
+### Application won't start
+- Clear everything and restart:
+  ```bash
+  docker-compose down -v
+  docker-compose up -d
+  ```
+
 ## Service Management
 
 ### Restart Services
@@ -379,3 +431,23 @@ The project uses GitHub Actions for automated builds:
 - **Pull requests**: Runs tests and builds
 
 See `.github/workflows/ci.yml` for details.
+
+## Performance
+
+For 5 users on a local machine:
+
+- **Memory**: ~500MB RAM total
+- **CPU**: Minimal (< 5% at rest)
+- **Startup Time**: 15-20 seconds
+- **Response Time**: < 100ms typically
+
+## Getting Help
+
+1. Check the logs: `docker-compose logs -f`
+2. See if containers are running: `docker-compose ps`
+3. Test if backend is responding: `curl http://localhost:8080/health`
+4. Verify database is ready: `docker-compose exec db pg_isready -U postgres`
+
+---
+
+**For more quick commands, see `DEPLOYMENT_SUMMARY.md`**
