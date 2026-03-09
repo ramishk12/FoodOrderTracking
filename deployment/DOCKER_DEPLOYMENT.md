@@ -9,17 +9,18 @@ This guide explains how to deploy the Food Order Tracking application using Dock
 ```
 FoodOrderTracking/
 ├── deployment/
-│   ├── docker-compose.yml    # Local development
-│   └── DOCKER_DEPLOYMENT.md # This file
-├── Dockerfile.backend       # Go backend Docker image
-├── Dockerfile.frontend     # React frontend Docker image
-├── nginx.conf             # Nginx configuration
-├── .dockerignore          # Build optimization
-├── cmd/                   # Backend entry point
-├── internal/              # Backend source code
-├── web/                   # Frontend source code
-├── .github/workflows/     # CI/CD pipelines
-└── AGENTS.md            # Development guidelines
+│   ├── docker-compose.yml      # Local development orchestration
+│   ├── Dockerfile.backend     # Go backend Docker image
+│   ├── Dockerfile.frontend   # React frontend Docker image
+│   ├── nginx.conf            # Nginx configuration
+│   ├── DOCKER_DEPLOYMENT.md  # This file
+│   └── DEPLOYMENT_SUMMARY.md # Quick reference
+├── .dockerignore              # Build optimization
+├── cmd/                       # Backend entry point
+├── internal/                  # Backend source code
+├── web/                       # Frontend source code
+├── .github/workflows/         # CI/CD pipelines
+└── AGENTS.md                  # Development guidelines
 ```
 
 ## Quick Start (Local Development)
@@ -126,9 +127,9 @@ volumes:
 ### Option 2: Build Locally and Transfer
 
 ```bash
-# Build images
-docker build -t food-order-backend:latest .
-docker build -t food-order-frontend:latest -f Dockerfile.frontend .
+# Build images (from project root)
+docker build -t food-order-backend:latest -f deployment/Dockerfile.backend .
+docker build -t food-order-frontend:latest -f deployment/Dockerfile.frontend .
 
 # Save images
 docker save food-order-backend:latest -o backend.tar
@@ -197,13 +198,49 @@ docker-compose ps
 
 ### View Logs
 ```bash
-docker-compose logs -f [service name]
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f backend
+docker-compose logs -f frontend
+docker-compose logs -f db
+```
+
+### Check Backend Health
+```bash
+curl http://localhost:8080/health
 ```
 
 ### Database Connection Issues
 ```bash
 # Check database is ready
 docker-compose exec db pg_isready -U postgres
+
+# View database tables
+docker-compose exec db psql -U postgres -d food_order_tracking -c "\dt"
+
+# Check network connectivity
+docker-compose exec backend ping db
+```
+
+### Connect to Running Containers
+```bash
+# Shell access to backend
+docker-compose exec backend sh
+
+# View frontend files
+docker-compose exec frontend ls -la /usr/share/nginx/html
+
+# View nginx config
+docker-compose exec frontend cat /etc/nginx/nginx.conf
+
+# Check backend environment
+docker-compose exec backend env
+
+# View backend directory
+docker-compose exec backend pwd
+docker-compose exec backend ls -la
 ```
 
 ### Port Already in Use
@@ -211,6 +248,127 @@ Edit ports in docker-compose.yml:
 ```yaml
 ports:
   - "8081:8080"  # Change host port
+```
+
+Or find and kill the process (Windows):
+```bash
+netstat -ano | findstr :80
+taskkill /PID <PID> /F
+```
+
+### Rebuild Everything Fresh
+```bash
+docker-compose down -v
+docker system prune -f
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+### View Full Container Output with Timestamps
+```bash
+docker-compose logs -f --timestamps
+```
+
+## Service Management
+
+### Restart Services
+```bash
+# Restart single service
+docker-compose restart backend
+
+# Restart all services
+docker-compose restart
+```
+
+### Start/Stop Single Service
+```bash
+docker-compose stop backend
+docker-compose start backend
+```
+
+### Rebuild After Code Changes
+```bash
+# Rebuild specific service
+docker-compose up -d --build backend
+docker-compose up -d --build frontend
+
+# Rebuild all
+docker-compose up -d --build
+```
+
+## Data Management
+
+### Check Database Size
+```bash
+docker-compose exec db psql -U postgres -d food_order_tracking -c "SELECT pg_size_pretty(pg_database_size('food_order_tracking'));"
+```
+
+### Connect to Database
+```bash
+# Interactive SQL shell
+docker-compose exec db psql -U postgres -d food_order_tracking
+
+# Quick query
+docker-compose exec db psql -U postgres -d food_order_tracking -c "SELECT * FROM customers;"
+```
+
+### Clear Database (Full Reset)
+```bash
+docker-compose down -v
+docker-compose up -d
+```
+
+## Cleanup
+
+### Remove Stopped Containers
+```bash
+docker-compose rm
+```
+
+### Remove All Docker Images
+```bash
+docker image prune -a
+```
+
+### Full System Cleanup
+```bash
+docker-compose down -v
+docker system prune -a --volumes
+```
+
+## Performance Monitoring
+
+### Check Container Resource Usage
+```bash
+docker stats
+```
+
+### Limit Backend Memory
+Edit `docker-compose.yml`:
+```yaml
+backend:
+  deploy:
+    resources:
+      limits:
+        memory: 256M
+```
+
+## Useful One-Liners
+
+```bash
+# Start and watch logs
+docker-compose up -d && docker-compose logs -f
+
+# Rebuild and watch logs
+docker-compose up -d --build && docker-compose logs -f
+
+# Check everything is healthy
+docker-compose exec db pg_isready -U postgres && \
+  curl http://localhost:8080/health && \
+  echo "All services OK"
+
+# Database backup with timestamp
+docker-compose exec db pg_dump -U postgres food_order_tracking > backup_$(date +%Y%m%d_%H%M%S).sql
 ```
 
 ## CI/CD
