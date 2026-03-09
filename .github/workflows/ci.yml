@@ -17,10 +17,8 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     if: |
-      contains(github.event.head_commit.modified, '.go') ||
-      contains(github.event.head_commit.modified, 'go.mod') ||
-      contains(github.event.head_commit.modified, 'go.sum') ||
-      github.event_name == 'pull_request'
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && (contains(github.event.head_commit.modified, '.go') || contains(github.event.head_commit.modified, 'go.mod') || contains(github.event.head_commit.modified, 'go.sum')))
     steps:
       - uses: actions/checkout@v4
 
@@ -42,8 +40,8 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     if: |
-      contains(github.event.head_commit.modified, 'web/') ||
-      github.event_name == 'pull_request'
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && contains(github.event.head_commit.modified, 'web/'))
     defaults:
       run:
         working-directory: web
@@ -67,10 +65,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     if: |
-      contains(github.event.head_commit.modified, '.go') ||
-      contains(github.event.head_commit.modified, 'go.mod') ||
-      contains(github.event.head_commit.modified, 'go.sum') ||
-      github.event_name == 'pull_request'
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'push' && (contains(github.event.head_commit.modified, '.go') || contains(github.event.head_commit.modified, 'go.mod') || contains(github.event.head_commit.modified, 'go.sum')))
     steps:
       - uses: actions/checkout@v4
 
