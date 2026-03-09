@@ -24,8 +24,8 @@ services:
   # Go Backend API
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: ..
+      dockerfile: deployment/Dockerfile.backend
     container_name: food-order-backend
     depends_on:
       db:
@@ -46,8 +46,8 @@ services:
   # React Frontend
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ..
+      dockerfile: deployment/Dockerfile.frontend
     container_name: food-order-frontend
     depends_on:
       - backend
