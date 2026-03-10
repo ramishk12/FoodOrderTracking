@@ -87,10 +87,10 @@ jobs:
       - uses: actions/dependency-review-action@v4
 
   # Build and push Docker images - only on push to main (not PRs)
+  # Runs independently so it always builds regardless of which files changed
   docker:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [backend, frontend]
     permissions:
       contents: read
       packages: write
