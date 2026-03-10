@@ -96,22 +96,56 @@ All three services run in a Docker network and communicate with each other inter
 The CI workflow automatically builds and pushes Docker images to GHCR on push to main:
 
 ```
+# amd64 (Intel/AMD)
 ghcr.io/ramishk12/food-order-tracking/backend:latest
 ghcr.io/ramishk12/food-order-tracking/frontend:latest
+
+# armv7 (Raspberry Pi 3)
+ghcr.io/ramishk12/food-order-tracking/backend:armv7
+ghcr.io/ramishk12/food-order-tracking/frontend:armv7
 ```
 
-#### Pull on Production Server
+#### Create GitHub Token for Pulling Images
+
+1. Go to: https://github.com/settings/tokens/new
+2. Select scopes: `read:packages`
+3. Generate token and copy it
+
+#### Login to GHCR on Production Server
+
 ```bash
-# Login to GHCR
+# SSH to your server/Pi
+ssh pi@10.0.0.122
+
+# Login to GHCR (paste your token when prompted)
 echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
 
-# Pull images
+# Or interactively
+docker login ghcr.io
+# Username: your GitHub username
+# Password: your GitHub token (with read:packages scope)
+```
+
+#### Pull Images
+
+```bash
+# For Raspberry Pi 3 (armv7)
+docker pull ghcr.io/ramishk12/food-order-tracking/backend:armv7
+docker pull ghcr.io/ramishk12/food-order-tracking/frontend:armv7
+
+# For x86_64 servers (amd64)
 docker pull ghcr.io/ramishk12/food-order-tracking/backend:latest
 docker pull ghcr.io/ramishk12/food-order-tracking/frontend:latest
 ```
 
 #### Run with Docker Compose
 Create `docker-compose.yml` on your server:
+
+> **For Raspberry Pi 3:** Use `armv7` tag instead of `latest`
+> ```yaml
+> image: ghcr.io/ramishk12/food-order-tracking/backend:armv7
+> image: ghcr.io/ramishk12/food-order-tracking/frontend:armv7
+> ```
 
 ```yaml
 version: '3.8'
