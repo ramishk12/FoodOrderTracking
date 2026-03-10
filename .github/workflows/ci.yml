@@ -117,12 +117,14 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=
             type=raw,value=latest
+            type=raw,value=armv7,enable={{ is_default_branch }}
 
-      - name: Build and push backend
+      - name: Build and push backend (amd64 + armv7)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: deployment/Dockerfile.backend
+          platforms: linux/amd64,linux/arm/v7
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
@@ -138,12 +140,14 @@ jobs:
             type=ref,event=branch
             type=sha,prefix=
             type=raw,value=latest
+            type=raw,value=armv7,enable={{ is_default_branch }}
 
-      - name: Build and push frontend
+      - name: Build and push frontend (amd64 + armv7)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: deployment/Dockerfile.frontend
+          platforms: linux/amd64,linux/arm/v7
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
