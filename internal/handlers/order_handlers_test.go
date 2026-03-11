@@ -135,7 +135,6 @@ func TestGetOrders(t *testing.T) {
 			assert.NoError(t, err)
 			defer db.Close()
 
-			database.DB, _ = db, func() { database.DB = nil }()
 			originalDB := database.DB
 			database.DB = db
 			defer func() { database.DB = originalDB }()
