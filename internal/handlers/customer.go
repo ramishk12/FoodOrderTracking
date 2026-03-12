@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/models"
@@ -27,7 +28,7 @@ func scanCustomer(row interface {
 
 // validateCustomer returns false and writes an error response if the input is invalid.
 func validateCustomer(c *gin.Context, input models.Customer) bool {
-	if input.Name == "" {
+	if strings.TrimSpace(input.Name) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
 		return false
 	}
@@ -63,7 +64,7 @@ func GetCustomers(c *gin.Context) {
 // GetCustomer returns a single customer by ID.
 func GetCustomer(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID"})
 		return
 	}
@@ -107,7 +108,7 @@ func CreateCustomer(c *gin.Context) {
 // UpdateCustomer updates an existing customer's details by ID.
 func UpdateCustomer(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID"})
 		return
 	}
@@ -138,7 +139,7 @@ func UpdateCustomer(c *gin.Context) {
 // customer has any associated orders.
 func DeleteCustomer(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID"})
 		return
 	}
