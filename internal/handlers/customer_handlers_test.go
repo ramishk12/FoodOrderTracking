@@ -34,209 +34,257 @@ func setupTestDB() (*sql.DB, sqlmock.Sqlmock, error) {
 	return db, mock, nil
 }
 
-// createTestContext creates a Gin context for testing
-func createTestContext(db *sql.DB, method, path string, body string) (*gin.Context, *httptest.ResponseRecorder) {
-	gin.SetMode(gin.TestMode)
-	w := httptest.NewRecorder()
+// withMockDB sets database.DB to a mock, runs f, then restores the original.
+func withMockDB(t *testing.T, f func(m sqlmock.Sqlmock)) {
+	t.Helper()
+	db, mock, err := setupTestDB()
+	assert.NoError(t, err)
+	defer db.Close()
 
-	var req *http.Request
-	if body == "" {
-		req = httptest.NewRequest(method, path, nil)
-	} else {
-		req = httptest.NewRequest(method, path, strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	c, _ := gin.CreateTestContext(w)
-	c.Request = req
-
-	// Replace the global database.DB with our mock
-	originalDB := database.DB
+	original := database.DB
 	database.DB = db
+	defer func() { database.DB = original }()
 
-	// Restore after test
-	database.DB = originalDB
-
-	return c, w
+	f(mock)
 }
 
-// createCustomerJSON creates a JSON string for customer
-func createCustomerJSON(name, phone, email, address string) string {
-	customer := models.Customer{
-		Name:    name,
-		Phone:   phone,
-		Email:   email,
-		Address: address,
-	}
-	json, _ := json.Marshal(customer)
-	return string(json)
+// ── Column/query constants ───────────────────────────────────────────────────
+
+var customerCols = []string{"id", "name", "phone", "email", "address", "created_at", "updated_at"}
+
+const (
+	customerQueryRegex       = `SELECT id, name, phone, email, address, created_at, updated_at\s+FROM customers`
+	insertCustomerQueryRegex = `INSERT INTO customers`
+	updateCustomerExecRegex  = `UPDATE customers\s+SET`
+	orderCountQueryRegex     = `SELECT COUNT\(\*\) FROM orders WHERE customer_id = \$1`
+	deleteCustomerExecRegex  = `DELETE FROM customers WHERE id = \$1`
+)
+
+// ── Row helpers ──────────────────────────────────────────────────────────────
+
+// customerRow returns a sqlmock row representing a single customer.
+func customerRow(id int, name, phone, email, address string) *sqlmock.Rows {
+	return sqlmock.NewRows(customerCols).
+		AddRow(id, name, phone, email, address, time.Now(), time.Now())
 }
 
-// TestGetCustomers tests the GetCustomers handler
+// ── Tests ────────────────────────────────────────────────────────────────────
+
 func TestGetCustomers(t *testing.T) {
 	tests := []struct {
 		name           string
 		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
-		expectedLen    int
+		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
-			name: "Returns empty list when no customers",
+			name: "Returns all customers",
 			setupMock: func(m sqlmock.Sqlmock) {
-				rows := sqlmock.NewRows([]string{"id", "name", "phone", "email", "address", "created_at", "updated_at"})
-				m.ExpectQuery("SELECT id, name, phone, email, address, created_at, updated_at FROM customers ORDER BY created_at DESC").
-					WillReturnRows(rows)
+				m.ExpectQuery(customerQueryRegex).
+					WillReturnRows(sqlmock.NewRows(customerCols).
+						AddRow(1, "John Doe", "555-1234", "john@example.com", "123 Main St", time.Now(), time.Now()).
+						AddRow(2, "Jane Smith", "555-5678", "jane@example.com", "456 Oak Ave", time.Now(), time.Now()))
 			},
 			expectedStatus: http.StatusOK,
-			expectedLen:    0,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var customers []models.Customer
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &customers))
+				assert.Len(t, customers, 2)
+				assert.Equal(t, "John Doe", customers[0].Name)
+				assert.Equal(t, "Jane Smith", customers[1].Name)
+			},
 		},
 		{
-			name: "Returns customers when they exist",
+			name: "Returns empty array when no customers exist",
 			setupMock: func(m sqlmock.Sqlmock) {
-				rows := sqlmock.NewRows([]string{"id", "name", "phone", "email", "address", "created_at", "updated_at"}).
-					AddRow(1, "John Doe", "555-1234", "john@example.com", "123 Main St", time.Now(), time.Now()).
-					AddRow(2, "Jane Doe", "555-5678", "jane@example.com", "456 Oak Ave", time.Now(), time.Now())
-				m.ExpectQuery("SELECT id, name, phone, email, address, created_at, updated_at FROM customers ORDER BY created_at DESC").
-					WillReturnRows(rows)
+				m.ExpectQuery(customerQueryRegex).
+					WillReturnRows(sqlmock.NewRows(customerCols))
 			},
 			expectedStatus: http.StatusOK,
-			expectedLen:    2,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				// Should return null or [] — either is valid JSON for an empty slice
+				assert.Contains(t, []string{"null", "[]"}, strings.TrimSpace(w.Body.String()))
+			},
 		},
 		{
 			name: "Returns 500 on database error",
 			setupMock: func(m sqlmock.Sqlmock) {
-				m.ExpectQuery("SELECT id, name, phone, email, address, created_at, updated_at FROM customers ORDER BY created_at DESC").
-					WillReturnError(fmt.Errorf("database connection error"))
+				m.ExpectQuery(customerQueryRegex).
+					WillReturnError(fmt.Errorf("connection refused"))
 			},
 			expectedStatus: http.StatusInternalServerError,
-			expectedLen:    0,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
+		},
+		{
+			name: "Returns customers with all fields populated",
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(customerQueryRegex).
+					WillReturnRows(sqlmock.NewRows(customerCols).
+						AddRow(1, "Alice", "555-0001", "alice@example.com", "1 A St",
+							time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+							time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var customers []models.Customer
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &customers))
+				assert.Len(t, customers, 1)
+				c := customers[0]
+				assert.Equal(t, 1, c.ID)
+				assert.Equal(t, "Alice", c.Name)
+				assert.Equal(t, "555-0001", c.Phone)
+				assert.Equal(t, "alice@example.com", c.Email)
+				assert.Equal(t, "1 A St", c.Address)
+			},
+		},
+		{
+			name: "Continues scanning after a bad row",
+			setupMock: func(m sqlmock.Sqlmock) {
+				// Second row has a type mismatch (string for int ID) to force scan error.
+				m.ExpectQuery(customerQueryRegex).
+					WillReturnRows(sqlmock.NewRows(customerCols).
+						AddRow("not-an-int", "Bad Row", "", "", "", time.Now(), time.Now()).
+						AddRow(2, "Good Row", "555-0002", "good@example.com", "2 B St", time.Now(), time.Now()))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var customers []models.Customer
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &customers))
+				// Bad row skipped, good row present
+				assert.Len(t, customers, 1)
+				assert.Equal(t, "Good Row", customers[0].Name)
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			// Replace global database.DB with mock
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, "/api/customers", nil)
 
-			tt.setupMock(mock)
+				GetCustomers(c)
 
-			// Create test context
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, "/api/customers", nil)
-
-			// Call handler
-			GetCustomers(c)
-
-			// Assert status code
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			// If expecting customers, verify them
-			if tt.expectedStatus == http.StatusOK && tt.expectedLen > 0 {
-				var customers []models.Customer
-				err := json.Unmarshal(w.Body.Bytes(), &customers)
-				assert.NoError(t, err)
-				assert.Len(t, customers, tt.expectedLen)
-			}
-
-			// Verify all expectations
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
 
-// TestGetCustomer tests the GetCustomer handler
 func TestGetCustomer(t *testing.T) {
 	tests := []struct {
 		name           string
 		customerID     string
-		setupMock      func(sqlmock.Sqlmock, string)
+		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
 		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
-			name:       "Returns customer when found",
+			name:       "Returns customer by ID",
 			customerID: "1",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				rows := sqlmock.NewRows([]string{"id", "name", "phone", "email", "address", "created_at", "updated_at"}).
-					AddRow(1, "John Doe", "555-1234", "john@example.com", "123 Main St", time.Now(), time.Now())
-				m.ExpectQuery("SELECT id, name, phone, email, address, created_at, updated_at FROM customers WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(customerQueryRegex).
 					WithArgs(1).
-					WillReturnRows(rows)
+					WillReturnRows(customerRow(1, "John Doe", "555-1234", "john@example.com", "123 Main St"))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var customer models.Customer
-				err := json.Unmarshal(w.Body.Bytes(), &customer)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &customer))
+				assert.Equal(t, 1, customer.ID)
 				assert.Equal(t, "John Doe", customer.Name)
+				assert.Equal(t, "555-1234", customer.Phone)
+				assert.Equal(t, "john@example.com", customer.Email)
+				assert.Equal(t, "123 Main St", customer.Address)
+			},
+		},
+		{
+			name:           "Returns 400 for non-numeric ID",
+			customerID:     "abc",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid customer ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for zero ID",
+			customerID:     "0",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid customer ID", resp["error"])
 			},
 		},
 		{
 			name:       "Returns 404 when customer not found",
 			customerID: "999",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				m.ExpectQuery("SELECT id, name, phone, email, address, created_at, updated_at FROM customers WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(customerQueryRegex).
 					WithArgs(999).
 					WillReturnError(sql.ErrNoRows)
 			},
 			expectedStatus: http.StatusNotFound,
-			checkResponse:  nil,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Customer not found", resp["error"])
+			},
 		},
 		{
-			name:       "Returns 400 for invalid customer ID",
-			customerID: "abc",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				// No mock needed - should fail before DB call
+			name:       "Returns 404 on any database error",
+			customerID: "1",
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(customerQueryRegex).
+					WithArgs(1).
+					WillReturnError(fmt.Errorf("connection lost"))
 			},
-			expectedStatus: http.StatusBadRequest,
-			checkResponse:  nil,
+			expectedStatus: http.StatusNotFound,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Customer not found", resp["error"])
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: tt.customerID}}
+				c.Request = httptest.NewRequest(http.MethodGet, "/api/customers/"+tt.customerID, nil)
 
-			if tt.setupMock != nil {
-				tt.setupMock(mock, tt.customerID)
-			}
+				GetCustomer(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "id", Value: tt.customerID}}
-			c.Request = httptest.NewRequest(http.MethodGet, "/api/customers/"+tt.customerID, nil)
-
-			GetCustomer(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
 
-// TestCreateCustomer tests the CreateCustomer handler
 func TestCreateCustomer(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -246,221 +294,350 @@ func TestCreateCustomer(t *testing.T) {
 		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
-			name:           "Creates customer successfully",
-			body:           createCustomerJSON("John Doe", "555-1234", "john@example.com", "123 Main St"),
+			name: "Creates customer with all fields",
+			body: `{"name":"John Doe","phone":"555-1234","email":"john@example.com","address":"123 Main St"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(insertCustomerQueryRegex).
+					WithArgs("John Doe", "555-1234", "john@example.com", "123 Main St").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+			},
 			expectedStatus: http.StatusCreated,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var customer models.Customer
-				err := json.Unmarshal(w.Body.Bytes(), &customer)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &customer))
+				assert.Equal(t, 1, customer.ID)
 				assert.Equal(t, "John Doe", customer.Name)
 				assert.Equal(t, "555-1234", customer.Phone)
+				assert.Equal(t, "john@example.com", customer.Email)
+				assert.Equal(t, "123 Main St", customer.Address)
+			},
+		},
+		{
+			name: "Creates customer with name only (optional fields empty)",
+			body: `{"name":"Minimal Customer"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(insertCustomerQueryRegex).
+					WithArgs("Minimal Customer", "", "", "").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(2))
+			},
+			expectedStatus: http.StatusCreated,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var customer models.Customer
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &customer))
+				assert.Equal(t, 2, customer.ID)
+				assert.Equal(t, "Minimal Customer", customer.Name)
 			},
 		},
 		{
 			name:           "Returns 400 for invalid JSON",
-			body:           "{invalid json",
+			body:           `{invalid json`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
-			checkResponse:  nil,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 when name is missing",
+			body:           `{"phone":"555-1234","email":"test@example.com"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Name is required", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 when name is blank whitespace",
+			body:           `{"name":"   ","phone":"555-1234"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Name is required", resp["error"])
+			},
+		},
+		{
+			name: "Returns 500 on database error",
+			body: `{"name":"John Doe","phone":"555-1234","email":"john@example.com","address":"123 Main St"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(insertCustomerQueryRegex).
+					WillReturnError(fmt.Errorf("unique constraint violation"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				req := httptest.NewRequest(http.MethodPost, "/api/customers", strings.NewReader(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+				c.Request = req
 
-			if tt.name == "Creates customer successfully" {
-				rows := sqlmock.NewRows([]string{"id"}).AddRow(1)
-				mock.ExpectQuery("INSERT INTO customers").
-					WillReturnRows(rows)
-			}
+				CreateCustomer(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodPost, "/api/customers", strings.NewReader(tt.body))
-			c.Request.Header.Set("Content-Type", "application/json")
-
-			CreateCustomer(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
 
-// TestUpdateCustomer tests the UpdateCustomer handler
 func TestUpdateCustomer(t *testing.T) {
 	tests := []struct {
 		name           string
 		customerID     string
 		body           string
-		setupMock      func(sqlmock.Sqlmock, string)
+		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
+		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
-			name:           "Updates customer successfully",
-			customerID:     "1",
-			body:           createCustomerJSON("John Updated", "555-9999", "john.updated@example.com", "789 New St"),
+			name:       "Updates customer successfully",
+			customerID: "1",
+			body:       `{"name":"John Updated","phone":"555-9999","email":"updated@example.com","address":"789 New St"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(updateCustomerExecRegex).
+					WithArgs("John Updated", "555-9999", "updated@example.com", "789 New St", 1).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
 			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Customer updated", resp["message"])
+			},
 		},
 		{
-			name:           "Returns 400 for invalid customer ID",
+			name:       "Updates customer clearing optional fields",
+			customerID: "2",
+			body:       `{"name":"Name Only","phone":"","email":"","address":""}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(updateCustomerExecRegex).
+					WithArgs("Name Only", "", "", "", 2).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Customer updated", resp["message"])
+			},
+		},
+		{
+			name:           "Returns 400 for non-numeric ID",
 			customerID:     "abc",
-			body:           createCustomerJSON("John", "555-1234", "john@test.com", "123 St"),
+			body:           `{"name":"John"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid customer ID", resp["error"])
+			},
 		},
 		{
 			name:           "Returns 400 for invalid JSON",
 			customerID:     "1",
-			body:           "{invalid",
+			body:           `{invalid`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Returns 400 when name is missing",
+			customerID:     "1",
+			body:           `{"phone":"555-1234"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Name is required", resp["error"])
+			},
+		},
+		{
+			name:       "Returns 500 on database error",
+			customerID: "1",
+			body:       `{"name":"John Doe"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(updateCustomerExecRegex).
+					WillReturnError(fmt.Errorf("deadlock detected"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: tt.customerID}}
+				req := httptest.NewRequest(http.MethodPut, "/api/customers/"+tt.customerID, strings.NewReader(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+				c.Request = req
 
-			if tt.expectedStatus == http.StatusOK {
-				mock.ExpectExec("UPDATE customers SET name = \\$1, phone = \\$2, email = \\$3, address = \\$4, updated_at = CURRENT_TIMESTAMP WHERE id = \\$5").
-					WillReturnResult(sqlmock.NewResult(1, 1))
-			}
+				UpdateCustomer(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "id", Value: tt.customerID}}
-			c.Request = httptest.NewRequest(http.MethodPut, "/api/customers/"+tt.customerID, strings.NewReader(tt.body))
-			c.Request.Header.Set("Content-Type", "application/json")
-
-			UpdateCustomer(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
 
-// TestDeleteCustomer tests the DeleteCustomer handler
 func TestDeleteCustomer(t *testing.T) {
 	tests := []struct {
 		name           string
 		customerID     string
-		setupMock      func(sqlmock.Sqlmock, string)
+		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
-		checkMessage   string
+		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
-			name:       "Deletes customer successfully",
+			name:       "Deletes customer with no orders",
 			customerID: "1",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				// First check for orders
-				orderRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
-				m.ExpectQuery("SELECT COUNT\\(\\*\\) FROM orders WHERE customer_id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(orderCountQueryRegex).
 					WithArgs(1).
-					WillReturnRows(orderRows)
-				// Then delete
-				m.ExpectExec("DELETE FROM customers WHERE id = \\$1").
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+				m.ExpectExec(deleteCustomerExecRegex).
 					WithArgs(1).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 			expectedStatus: http.StatusOK,
-			checkMessage:   "Customer deleted",
-		},
-		{
-			name:       "Returns 400 when customer has orders",
-			customerID: "1",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				// Return error to simulate existing orders check failure
-				m.ExpectQuery("SELECT COUNT\\(\\*\\) FROM orders WHERE customer_id = \\$1").
-					WithArgs(1).
-					WillReturnError(fmt.Errorf("foreign key constraint"))
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Customer deleted", resp["message"])
 			},
-			expectedStatus: http.StatusInternalServerError,
-			checkMessage:   "",
 		},
 		{
-			name:       "Returns 400 for invalid customer ID",
-			customerID: "abc",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				// No mock needed - fails before DB call
+			name:       "Returns 400 when customer has existing orders",
+			customerID: "2",
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(orderCountQueryRegex).
+					WithArgs(2).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
+				// No DELETE expected — handler should stop here
 			},
 			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Cannot delete customer with existing orders", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for non-numeric ID",
+			customerID:     "abc",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid customer ID", resp["error"])
+			},
+		},
+		{
+			name:       "Returns 500 when order count query fails",
+			customerID: "1",
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(orderCountQueryRegex).
+					WithArgs(1).
+					WillReturnError(fmt.Errorf("connection lost"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
+		},
+		{
+			name:       "Returns 500 when delete query fails",
+			customerID: "1",
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(orderCountQueryRegex).
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+				m.ExpectExec(deleteCustomerExecRegex).
+					WithArgs(1).
+					WillReturnError(fmt.Errorf("lock timeout"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
+		},
+		{
+			// Deleting a non-existent customer is idempotent — still returns 200
+			name:       "Deletes non-existent customer without error",
+			customerID: "999",
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(orderCountQueryRegex).
+					WithArgs(999).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+				m.ExpectExec(deleteCustomerExecRegex).
+					WithArgs(999).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Customer deleted", resp["message"])
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: tt.customerID}}
+				c.Request = httptest.NewRequest(http.MethodDelete, "/api/customers/"+tt.customerID, nil)
 
-			if tt.setupMock != nil {
-				tt.setupMock(mock, tt.customerID)
-			}
+				DeleteCustomer(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "id", Value: tt.customerID}}
-			c.Request = httptest.NewRequest(http.MethodDelete, "/api/customers/"+tt.customerID, nil)
-
-			DeleteCustomer(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-
-			if tt.checkMessage != "" {
-				var response map[string]interface{}
-				err := json.Unmarshal(w.Body.Bytes(), &response)
-				assert.NoError(t, err)
-				assert.Equal(t, tt.checkMessage, response["message"])
-			}
-
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
-	}
-}
-
-// BenchmarkGetCustomers benchmarks the GetCustomers handler
-func BenchmarkGetCustomers(b *testing.B) {
-	db, _, _ := setupTestDB()
-	defer db.Close()
-
-	originalDB := database.DB
-	database.DB = db
-	defer func() { database.DB = originalDB }()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = httptest.NewRequest(http.MethodGet, "/api/customers", nil)
-		GetCustomers(c)
 	}
 }
