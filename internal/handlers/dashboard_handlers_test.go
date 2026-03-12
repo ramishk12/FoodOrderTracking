@@ -8,36 +8,29 @@ import (
 	"testing"
 	"time"
 
-	"food-order-tracking/internal/database"
-
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
-
-func init() {
-	gin.SetMode(gin.TestMode)
-}
 
 // ── Query regex constants ────────────────────────────────────────────────────
 
 const (
-	totalRevenueQueryRegex  = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled'`
-	periodRevenueQueryRegex = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled' AND created_at >=`
-	statusCountQueryRegex   = `SELECT status, COUNT\(\*\) FROM orders`
-	bestSellingQueryRegex   = `SELECT i\.name, SUM\(oi\.quantity\)`
-	topCustomersQueryRegex  = `SELECT COALESCE\(c\.name, 'Unknown'\)`
-	salesTrendQueryRegex    = `SELECT DATE\(created_at AT TIME ZONE 'UTC'\)`
+	totalRevenueQueryRegex   = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled'`
+	periodRevenueQueryRegex  = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled' AND created_at >=`
+	statusCountQueryRegex    = `SELECT status, COUNT\(\*\) FROM orders`
+	bestSellingQueryRegex    = `SELECT i\.name, SUM\(oi\.quantity\)`
+	topCustomersQueryRegex   = `SELECT COALESCE\(c\.name, 'Unknown'\)`
+	salesTrendQueryRegex     = `SELECT DATE\(created_at AT TIME ZONE 'UTC'\)`
 )
 
 // ── Shared column slices ─────────────────────────────────────────────────────
 
 var (
-	revenueCountCols = []string{"coalesce", "count"}
-	statusCols       = []string{"status", "count"}
-	bestSellingCols  = []string{"name", "total_qty", "total_revenue"}
-	topCustomerCols  = []string{"coalesce", "count", "sum"}
-	salesTrendCols   = []string{"day", "orders", "revenue"}
+	revenueCountCols  = []string{"coalesce", "count"}
+	statusCols        = []string{"status", "count"}
+	bestSellingCols   = []string{"name", "total_qty", "total_revenue"}
+	topCustomerCols   = []string{"coalesce", "count", "sum"}
+	salesTrendCols    = []string{"day", "orders", "revenue"}
 )
 
 // ── Mock helpers ─────────────────────────────────────────────────────────────
@@ -110,30 +103,6 @@ func mockFullDashboard(m sqlmock.Sqlmock) {
 		trendRows.AddRow(date, 1, 50.00)
 	}
 	mockSalesTrend(m, trendRows)
-}
-
-// runDashboardRequest fires a GET /api/dashboard request and returns the recorder.
-func runDashboardRequest(t *testing.T) *httptest.ResponseRecorder {
-	t.Helper()
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
-	GetDashboardStats(c)
-	return w
-}
-
-// withMockDB sets database.DB to a mock, runs f, then restores the original.
-func withMockDB(t *testing.T, f func(m sqlmock.Sqlmock)) {
-	t.Helper()
-	db, mock, err := setupTestDB()
-	assert.NoError(t, err)
-	defer db.Close()
-
-	original := database.DB
-	database.DB = db
-	defer func() { database.DB = original }()
-
-	f(mock)
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
