@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/models"
@@ -27,11 +28,11 @@ func scanItem(row interface {
 
 // validateItem returns false and writes an error response if the item input is invalid.
 func validateItem(c *gin.Context, input models.Item) bool {
-	if input.Name == "" {
+	if strings.TrimSpace(input.Name) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
 		return false
 	}
-	if input.Category == "" {
+	if strings.TrimSpace(input.Category) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Category is required"})
 		return false
 	}
@@ -51,7 +52,7 @@ func GetItems(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var items []models.Item
+	items := make([]models.Item, 0)
 	for rows.Next() {
 		i, err := scanItem(rows)
 		if err != nil {

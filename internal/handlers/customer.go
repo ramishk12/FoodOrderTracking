@@ -44,7 +44,7 @@ func GetCustomers(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var customers []models.Customer
+	customers := make([]models.Customer, 0)
 	for rows.Next() {
 		cust, err := scanCustomer(rows)
 		if err != nil {
@@ -96,7 +96,7 @@ func CreateCustomer(c *gin.Context) {
 		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`, input.Name, input.Phone, input.Email, input.Address).Scan(&id)
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -127,7 +127,7 @@ func UpdateCustomer(c *gin.Context) {
 		SET name = $1, phone = $2, email = $3, address = $4, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $5
 	`, input.Name, input.Phone, input.Email, input.Address, id)
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

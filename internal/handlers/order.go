@@ -74,9 +74,11 @@ func populateOrderItems(orders []models.Order) error {
 	}
 	defer rows.Close()
 
-	// Index orders by ID for O(1) lookup.
+	// Index orders by ID for O(1) lookup, and pre-initialize each order's
+	// items to an empty slice so JSON always encodes [] rather than null.
 	orderMap := make(map[int]*models.Order, len(orders))
 	for i := range orders {
+		orders[i].OrderItems = make([]models.OrderItem, 0)
 		orderMap[orders[i].ID] = &orders[i]
 	}
 
@@ -129,7 +131,7 @@ func GetOrders(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var orders []models.Order
+	orders := make([]models.Order, 0)
 	for rows.Next() {
 		o, err := scanOrder(rows)
 		if err != nil {
@@ -173,7 +175,7 @@ func GetScheduledOrders(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var orders []models.Order
+	orders := make([]models.Order, 0)
 	for rows.Next() {
 		o, err := scanOrder(rows)
 		if err != nil {
@@ -181,6 +183,10 @@ func GetScheduledOrders(c *gin.Context) {
 			continue
 		}
 		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	if err := populateOrderItems(orders); err != nil {
@@ -209,7 +215,7 @@ func GetOrdersByCustomer(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var orders []models.Order
+	orders := make([]models.Order, 0)
 	for rows.Next() {
 		o, err := scanOrder(rows)
 		if err != nil {
@@ -217,6 +223,10 @@ func GetOrdersByCustomer(c *gin.Context) {
 			continue
 		}
 		orders = append(orders, o)
+	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	if err := populateOrderItems(orders); err != nil {

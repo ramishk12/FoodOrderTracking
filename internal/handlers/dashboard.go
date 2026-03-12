@@ -222,7 +222,10 @@ func GetDashboardStats(c *gin.Context) {
 	salesTrendSince := now.AddDate(0, 0, -(salesTrendDays - 1))
 
 	stats := DashboardStats{
-		OrdersByStatus: make(map[string]int),
+		OrdersByStatus:   make(map[string]int),
+		BestSellingItems: make([]BestSellingItem, 0),
+		TopCustomers:     make([]TopCustomer, 0),
+		SalesTrend:       make([]SalesDataPoint, 0),
 	}
 
 	if err := fetchRevenueSummary(&stats, startOfMonth, startOfDay); err != nil {
