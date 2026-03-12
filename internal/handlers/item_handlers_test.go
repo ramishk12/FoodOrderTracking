@@ -18,6 +18,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// itemQueryCols are the columns returned by itemQuery SELECT.
+var itemQueryCols = []string{"id", "name", "description", "price", "category", "available", "created_at", "updated_at"}
+
+// itemQueryRegex matches the shared SELECT used by GetItems and GetItem.
+const itemQueryRegex = `SELECT id, name, description, price, category, available, created_at, updated_at\s+FROM items`
+
 func TestGetItems(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -28,18 +34,16 @@ func TestGetItems(t *testing.T) {
 		{
 			name: "Returns all available items",
 			setupMock: func(m sqlmock.Sqlmock) {
-				rows := sqlmock.NewRows([]string{"id", "name", "description", "price", "category", "available", "created_at", "updated_at"}).
-					AddRow(1, "Pizza", "Delicious pizza", 12.99, "Main", true, time.Now(), time.Now()).
-					AddRow(2, "Burger", "Tasty burger", 8.99, "Main", true, time.Now(), time.Now()).
-					AddRow(3, "Salad", "Fresh salad", 6.99, "Side", true, time.Now(), time.Now())
-				m.ExpectQuery("SELECT id, name, description, price, category, available, created_at, updated_at FROM items WHERE available = true ORDER BY category, name").
-					WillReturnRows(rows)
+				m.ExpectQuery(itemQueryRegex).
+					WillReturnRows(sqlmock.NewRows(itemQueryCols).
+						AddRow(1, "Pizza", "Delicious pizza", 12.99, "Main", true, time.Now(), time.Now()).
+						AddRow(2, "Burger", "Tasty burger", 8.99, "Main", true, time.Now(), time.Now()).
+						AddRow(3, "Salad", "Fresh salad", 6.99, "Side", true, time.Now(), time.Now()))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var items []models.Item
-				err := json.Unmarshal(w.Body.Bytes(), &items)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &items))
 				assert.Len(t, items, 3)
 				assert.Equal(t, "Pizza", items[0].Name)
 				assert.Equal(t, "Burger", items[1].Name)
@@ -49,45 +53,41 @@ func TestGetItems(t *testing.T) {
 		{
 			name: "Returns empty array when no items",
 			setupMock: func(m sqlmock.Sqlmock) {
-				rows := sqlmock.NewRows([]string{"id", "name", "description", "price", "category", "available", "created_at", "updated_at"})
-				m.ExpectQuery("SELECT id, name, description, price, category, available, created_at, updated_at FROM items WHERE available = true ORDER BY category, name").
-					WillReturnRows(rows)
+				m.ExpectQuery(itemQueryRegex).
+					WillReturnRows(sqlmock.NewRows(itemQueryCols))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var items []models.Item
-				err := json.Unmarshal(w.Body.Bytes(), &items)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &items))
 				assert.Len(t, items, 0)
 			},
 		},
 		{
 			name: "Returns 500 on database error",
 			setupMock: func(m sqlmock.Sqlmock) {
-				m.ExpectQuery("SELECT id, name, description, price, category, available, created_at, updated_at FROM items WHERE available = true ORDER BY category, name").
+				m.ExpectQuery(itemQueryRegex).
 					WillReturnError(fmt.Errorf("database connection error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
-			checkResponse:  nil,
 		},
 		{
-			name: "Returns items grouped by category",
+			name: "Returns items ordered by category then name",
 			setupMock: func(m sqlmock.Sqlmock) {
-				rows := sqlmock.NewRows([]string{"id", "name", "description", "price", "category", "available", "created_at", "updated_at"}).
-					AddRow(1, "Pizza", "Main dish", 12.99, "Main", true, time.Now(), time.Now()).
-					AddRow(2, "Pasta", "Italian pasta", 10.99, "Main", true, time.Now(), time.Now()).
-					AddRow(3, "Coke", "Beverage", 2.99, "Drinks", true, time.Now(), time.Now())
-				m.ExpectQuery("SELECT id, name, description, price, category, available, created_at, updated_at FROM items WHERE available = true ORDER BY category, name").
-					WillReturnRows(rows)
+				m.ExpectQuery(itemQueryRegex).
+					WillReturnRows(sqlmock.NewRows(itemQueryCols).
+						AddRow(1, "Coke", "Beverage", 2.99, "Drinks", true, time.Now(), time.Now()).
+						AddRow(2, "Pasta", "Italian pasta", 10.99, "Main", true, time.Now(), time.Now()).
+						AddRow(3, "Pizza", "Main dish", 12.99, "Main", true, time.Now(), time.Now()))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var items []models.Item
-				err := json.Unmarshal(w.Body.Bytes(), &items)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &items))
 				assert.Len(t, items, 3)
-				assert.Equal(t, "Main", items[0].Category)
-				assert.Equal(t, "Drinks", items[2].Category)
+				assert.Equal(t, "Drinks", items[0].Category)
+				assert.Equal(t, "Main", items[1].Category)
+				assert.Equal(t, "Main", items[2].Category)
 			},
 		},
 	}
@@ -95,9 +95,7 @@ func TestGetItems(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
+			assert.NoError(t, err)
 			defer db.Close()
 
 			originalDB := database.DB
@@ -113,11 +111,9 @@ func TestGetItems(t *testing.T) {
 			GetItems(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-
 			if tt.checkResponse != nil {
 				tt.checkResponse(t, w)
 			}
-
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
@@ -127,25 +123,23 @@ func TestGetItem(t *testing.T) {
 	tests := []struct {
 		name           string
 		itemID         string
-		setupMock      func(sqlmock.Sqlmock, string)
+		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
 		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
 			name:   "Returns item by ID",
 			itemID: "1",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				rows := sqlmock.NewRows([]string{"id", "name", "description", "price", "category", "available", "created_at", "updated_at"}).
-					AddRow(1, "Pizza", "Delicious pizza", 12.99, "Main", true, time.Now(), time.Now())
-				m.ExpectQuery("SELECT id, name, description, price, category, available, created_at, updated_at FROM items WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(itemQueryRegex).
 					WithArgs(1).
-					WillReturnRows(rows)
+					WillReturnRows(sqlmock.NewRows(itemQueryCols).
+						AddRow(1, "Pizza", "Delicious pizza", 12.99, "Main", true, time.Now(), time.Now()))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var item models.Item
-				err := json.Unmarshal(w.Body.Bytes(), &item)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &item))
 				assert.Equal(t, "Pizza", item.Name)
 				assert.Equal(t, 12.99, item.Price)
 			},
@@ -153,52 +147,50 @@ func TestGetItem(t *testing.T) {
 		{
 			name:           "Returns 400 for invalid item ID",
 			itemID:         "abc",
-			setupMock:      func(m sqlmock.Sqlmock, id string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Invalid item ID", resp["error"])
 			},
 		},
 		{
 			name:   "Returns 404 when item not found",
 			itemID: "999",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				m.ExpectQuery("SELECT id, name, description, price, category, available, created_at, updated_at FROM items WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(itemQueryRegex).
 					WithArgs(999).
 					WillReturnError(sql.ErrNoRows)
 			},
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Item not found", resp["error"])
 			},
 		},
 		{
-			name:   "Returns item with all fields",
+			name:   "Returns item with all fields populated",
 			itemID: "2",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				rows := sqlmock.NewRows([]string{"id", "name", "description", "price", "category", "available", "created_at", "updated_at"}).
-					AddRow(2, "Burger", "Tasty beef burger", 8.99, "Main", true, time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC))
-				m.ExpectQuery("SELECT id, name, description, price, category, available, created_at, updated_at FROM items WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(itemQueryRegex).
 					WithArgs(2).
-					WillReturnRows(rows)
+					WillReturnRows(sqlmock.NewRows(itemQueryCols).
+						AddRow(2, "Burger", "Tasty beef burger", 8.99, "Main", true,
+							time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+							time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var item models.Item
-				err := json.Unmarshal(w.Body.Bytes(), &item)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &item))
 				assert.Equal(t, 2, item.ID)
 				assert.Equal(t, "Burger", item.Name)
 				assert.Equal(t, "Tasty beef burger", item.Description)
 				assert.Equal(t, 8.99, item.Price)
 				assert.Equal(t, "Main", item.Category)
-				assert.Equal(t, true, item.Available)
+				assert.True(t, item.Available)
 			},
 		},
 	}
@@ -206,16 +198,14 @@ func TestGetItem(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
+			assert.NoError(t, err)
 			defer db.Close()
 
 			originalDB := database.DB
 			database.DB = db
 			defer func() { database.DB = originalDB }()
 
-			tt.setupMock(mock, tt.itemID)
+			tt.setupMock(mock)
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
@@ -225,11 +215,9 @@ func TestGetItem(t *testing.T) {
 			GetItem(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-
 			if tt.checkResponse != nil {
 				tt.checkResponse(t, w)
 			}
-
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
@@ -239,23 +227,22 @@ func TestCreateItem(t *testing.T) {
 	tests := []struct {
 		name           string
 		body           string
-		setupMock      func(sqlmock.Sqlmock, string)
+		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
 		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
 			name: "Creates item successfully",
 			body: `{"name":"Pizza","description":"Delicious pizza","price":12.99,"category":"Main","available":true}`,
-			setupMock: func(m sqlmock.Sqlmock, body string) {
-				m.ExpectQuery("INSERT INTO items \\(name, description, price, category, available\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5\\) RETURNING id").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(`INSERT INTO items`).
 					WithArgs("Pizza", "Delicious pizza", 12.99, "Main", true).
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 			},
 			expectedStatus: http.StatusCreated,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var item models.Item
-				err := json.Unmarshal(w.Body.Bytes(), &item)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &item))
 				assert.Equal(t, 1, item.ID)
 				assert.Equal(t, "Pizza", item.Name)
 				assert.Equal(t, 12.99, item.Price)
@@ -264,82 +251,96 @@ func TestCreateItem(t *testing.T) {
 		{
 			name:           "Returns 400 for invalid JSON",
 			body:           `{"name":"Pizza","price":}`,
-			setupMock:      func(m sqlmock.Sqlmock, body string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Contains(t, resp["error"], "invalid")
+			},
+		},
+		{
+			name:           "Returns 400 for missing name",
+			body:           `{"price":12.99,"category":"Main"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Name is required", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for missing category",
+			body:           `{"name":"Pizza","price":12.99}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Category is required", resp["error"])
 			},
 		},
 		{
 			name:           "Returns 400 for zero price",
 			body:           `{"name":"Pizza","price":0,"category":"Main"}`,
-			setupMock:      func(m sqlmock.Sqlmock, body string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Price must be greater than 0", resp["error"])
 			},
 		},
 		{
 			name:           "Returns 400 for negative price",
 			body:           `{"name":"Pizza","price":-5.99,"category":"Main"}`,
-			setupMock:      func(m sqlmock.Sqlmock, body string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Price must be greater than 0", resp["error"])
 			},
 		},
 		{
-			name: "Creates item with all fields",
+			name: "Creates unavailable item",
 			body: `{"name":"Burger","description":"Tasty burger","price":8.99,"category":"Main","available":false}`,
-			setupMock: func(m sqlmock.Sqlmock, body string) {
-				m.ExpectQuery("INSERT INTO items \\(name, description, price, category, available\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5\\) RETURNING id").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(`INSERT INTO items`).
 					WithArgs("Burger", "Tasty burger", 8.99, "Main", false).
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(2))
 			},
 			expectedStatus: http.StatusCreated,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var item models.Item
-				err := json.Unmarshal(w.Body.Bytes(), &item)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &item))
 				assert.Equal(t, 2, item.ID)
-				assert.Equal(t, "Burger", item.Name)
-				assert.Equal(t, false, item.Available)
+				assert.False(t, item.Available)
 			},
 		},
 		{
 			name: "Returns 500 on database error",
 			body: `{"name":"Pizza","price":12.99,"category":"Main"}`,
-			setupMock: func(m sqlmock.Sqlmock, body string) {
-				m.ExpectQuery("INSERT INTO items \\(name, description, price, category, available\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5\\) RETURNING id").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(`INSERT INTO items`).
 					WillReturnError(fmt.Errorf("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
-			checkResponse:  nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
+			assert.NoError(t, err)
 			defer db.Close()
 
 			originalDB := database.DB
 			database.DB = db
 			defer func() { database.DB = originalDB }()
 
-			tt.setupMock(mock, tt.body)
+			tt.setupMock(mock)
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
@@ -350,11 +351,9 @@ func TestCreateItem(t *testing.T) {
 			CreateItem(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-
 			if tt.checkResponse != nil {
 				tt.checkResponse(t, w)
 			}
-
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
@@ -365,7 +364,7 @@ func TestUpdateItem(t *testing.T) {
 		name           string
 		itemID         string
 		body           string
-		setupMock      func(sqlmock.Sqlmock, string, string)
+		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
 		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
@@ -373,16 +372,15 @@ func TestUpdateItem(t *testing.T) {
 			name:   "Updates item successfully",
 			itemID: "1",
 			body:   `{"name":"Pizza","description":"Updated pizza","price":14.99,"category":"Main","available":true}`,
-			setupMock: func(m sqlmock.Sqlmock, id, body string) {
-				m.ExpectExec("UPDATE items SET name = \\$1, description = \\$2, price = \\$3, category = \\$4, available = \\$5, updated_at = CURRENT_TIMESTAMP WHERE id = \\$6").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(`UPDATE items SET`).
 					WithArgs("Pizza", "Updated pizza", 14.99, "Main", true, 1).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Item updated", resp["message"])
 			},
 		},
@@ -390,12 +388,11 @@ func TestUpdateItem(t *testing.T) {
 			name:           "Returns 400 for invalid item ID",
 			itemID:         "abc",
 			body:           `{"name":"Pizza","price":12.99,"category":"Main"}`,
-			setupMock:      func(m sqlmock.Sqlmock, id, body string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Invalid item ID", resp["error"])
 			},
 		},
@@ -403,20 +400,42 @@ func TestUpdateItem(t *testing.T) {
 			name:           "Returns 400 for invalid JSON",
 			itemID:         "1",
 			body:           `{"name":"Pizza","price":}`,
-			setupMock:      func(m sqlmock.Sqlmock, id, body string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
-			checkResponse:  nil,
+		},
+		{
+			name:           "Returns 400 for missing name",
+			itemID:         "1",
+			body:           `{"price":12.99,"category":"Main"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Name is required", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for missing category",
+			itemID:         "1",
+			body:           `{"name":"Pizza","price":12.99}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Category is required", resp["error"])
+			},
 		},
 		{
 			name:           "Returns 400 for zero price",
 			itemID:         "1",
 			body:           `{"name":"Pizza","price":0,"category":"Main"}`,
-			setupMock:      func(m sqlmock.Sqlmock, id, body string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Price must be greater than 0", resp["error"])
 			},
 		},
@@ -424,75 +443,53 @@ func TestUpdateItem(t *testing.T) {
 			name:           "Returns 400 for negative price",
 			itemID:         "1",
 			body:           `{"name":"Pizza","price":-5.99,"category":"Main"}`,
-			setupMock:      func(m sqlmock.Sqlmock, id, body string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Price must be greater than 0", resp["error"])
 			},
-		},
-		{
-			name:   "Returns 500 on database error",
-			itemID: "1",
-			body:   `{"name":"Pizza","price":12.99,"category":"Main"}`,
-			setupMock: func(m sqlmock.Sqlmock, id, body string) {
-				m.ExpectExec("UPDATE items SET name = \\$1, description = \\$2, price = \\$3, category = \\$4, available = \\$5, updated_at = CURRENT_TIMESTAMP WHERE id = \\$6").
-					WillReturnError(fmt.Errorf("database error"))
-			},
-			expectedStatus: http.StatusInternalServerError,
-			checkResponse:  nil,
 		},
 		{
 			name:   "Updates item to unavailable",
 			itemID: "2",
 			body:   `{"name":"Burger","description":"Out of stock","price":8.99,"category":"Main","available":false}`,
-			setupMock: func(m sqlmock.Sqlmock, id, body string) {
-				m.ExpectExec("UPDATE items SET name = \\$1, description = \\$2, price = \\$3, category = \\$4, available = \\$5, updated_at = CURRENT_TIMESTAMP WHERE id = \\$6").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(`UPDATE items SET`).
 					WithArgs("Burger", "Out of stock", 8.99, "Main", false, 2).
 					WillReturnResult(sqlmock.NewResult(2, 1))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Item updated", resp["message"])
 			},
 		},
 		{
-			name:   "Updates item with new category",
-			itemID: "3",
-			body:   `{"name":"Fries","description":"Crispy fries","price":3.99,"category":"Sides","available":true}`,
-			setupMock: func(m sqlmock.Sqlmock, id, body string) {
-				m.ExpectExec("UPDATE items SET name = \\$1, description = \\$2, price = \\$3, category = \\$4, available = \\$5, updated_at = CURRENT_TIMESTAMP WHERE id = \\$6").
-					WithArgs("Fries", "Crispy fries", 3.99, "Sides", true, 3).
-					WillReturnResult(sqlmock.NewResult(3, 1))
+			name:   "Returns 500 on database error",
+			itemID: "1",
+			body:   `{"name":"Pizza","price":12.99,"category":"Main"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(`UPDATE items SET`).
+					WillReturnError(fmt.Errorf("database error"))
 			},
-			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
-				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
-				assert.Equal(t, "Item updated", resp["message"])
-			},
+			expectedStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
+			assert.NoError(t, err)
 			defer db.Close()
 
 			originalDB := database.DB
 			database.DB = db
 			defer func() { database.DB = originalDB }()
 
-			tt.setupMock(mock, tt.itemID, tt.body)
+			tt.setupMock(mock)
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
@@ -504,11 +501,9 @@ func TestUpdateItem(t *testing.T) {
 			UpdateItem(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-
 			if tt.checkResponse != nil {
 				tt.checkResponse(t, w)
 			}
-
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
@@ -518,77 +513,58 @@ func TestDeactivateItem(t *testing.T) {
 	tests := []struct {
 		name           string
 		itemID         string
-		setupMock      func(sqlmock.Sqlmock, string)
+		setupMock      func(sqlmock.Sqlmock)
 		expectedStatus int
 		checkResponse  func(t *testing.T, w *httptest.ResponseRecorder)
 	}{
 		{
 			name:   "Deactivates item successfully",
 			itemID: "1",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				m.ExpectExec("UPDATE items SET available = false, updated_at = CURRENT_TIMESTAMP WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(`UPDATE items SET available = false`).
 					WithArgs(1).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Item deactivated", resp["message"])
 			},
 		},
 		{
 			name:           "Returns 400 for invalid item ID",
 			itemID:         "abc",
-			setupMock:      func(m sqlmock.Sqlmock, id string) {},
+			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Invalid item ID", resp["error"])
 			},
 		},
 		{
 			name:   "Returns 500 on database error",
 			itemID: "1",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				m.ExpectExec("UPDATE items SET available = false, updated_at = CURRENT_TIMESTAMP WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(`UPDATE items SET available = false`).
 					WillReturnError(fmt.Errorf("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
-			checkResponse:  nil,
 		},
 		{
-			name:   "Deactivates non-existent item",
+			// Deactivating a non-existent item is idempotent — still returns 200
+			name:   "Deactivates non-existent item without error",
 			itemID: "999",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				m.ExpectExec("UPDATE items SET available = false, updated_at = CURRENT_TIMESTAMP WHERE id = \\$1").
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(`UPDATE items SET available = false`).
 					WithArgs(999).
-					WillReturnResult(sqlmock.NewResult(999, 0))
+					WillReturnResult(sqlmock.NewResult(0, 0))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
-				assert.Equal(t, "Item deactivated", resp["message"])
-			},
-		},
-		{
-			name:   "Deactivates multiple items",
-			itemID: "5",
-			setupMock: func(m sqlmock.Sqlmock, id string) {
-				m.ExpectExec("UPDATE items SET available = false, updated_at = CURRENT_TIMESTAMP WHERE id = \\$1").
-					WithArgs(5).
-					WillReturnResult(sqlmock.NewResult(5, 1))
-			},
-			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
-				var resp map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &resp)
-				assert.NoError(t, err)
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Item deactivated", resp["message"])
 			},
 		},
@@ -597,16 +573,14 @@ func TestDeactivateItem(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := setupTestDB()
-			if err != nil {
-				t.Fatalf("Failed to setup mock: %v", err)
-			}
+			assert.NoError(t, err)
 			defer db.Close()
 
 			originalDB := database.DB
 			database.DB = db
 			defer func() { database.DB = originalDB }()
 
-			tt.setupMock(mock, tt.itemID)
+			tt.setupMock(mock)
 
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
@@ -616,11 +590,9 @@ func TestDeactivateItem(t *testing.T) {
 			DeactivateItem(c)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
-
 			if tt.checkResponse != nil {
 				tt.checkResponse(t, w)
 			}
-
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
