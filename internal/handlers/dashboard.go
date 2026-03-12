@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -9,6 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	bestSellingItemsLimit = 10
+	topCustomersLimit     = 5
+	salesTrendDays        = 30
+)
+
+// DashboardStats is the top-level response for the dashboard endpoint.
 type DashboardStats struct {
 	TotalRevenue      float64           `json:"total_revenue"`
 	MonthlyRevenue    float64           `json:"monthly_revenue"`
@@ -23,134 +31,215 @@ type DashboardStats struct {
 	SalesTrend        []SalesDataPoint  `json:"sales_trend"`
 }
 
+// BestSellingItem holds aggregated sales data for a single menu item.
 type BestSellingItem struct {
 	Name     string  `json:"name"`
 	Quantity int     `json:"quantity"`
 	Revenue  float64 `json:"revenue"`
 }
 
+// TopCustomer holds aggregated order data for a single customer.
 type TopCustomer struct {
 	Name       string  `json:"name"`
 	OrderCount int     `json:"order_count"`
 	TotalSpent float64 `json:"total_spent"`
 }
 
+// SalesDataPoint holds order count and revenue for a single calendar day.
 type SalesDataPoint struct {
 	Date    string  `json:"date"`
 	Orders  int     `json:"orders"`
 	Revenue float64 `json:"revenue"`
 }
 
-func GetDashboardStats(c *gin.Context) {
-	now := time.Now()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-
-	var stats DashboardStats
-	stats.OrdersByStatus = make(map[string]int)
-
-	// Total revenue and orders (all time)
-	err := database.DB.QueryRow("SELECT COALESCE(SUM(total_amount), 0), COUNT(*) FROM orders WHERE status != 'cancelled'").Scan(&stats.TotalRevenue, &stats.TotalOrders)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+// fetchRevenueSummary populates total, monthly, and daily revenue/order counts
+// in a single query each, scoped to the provided time boundaries.
+func fetchRevenueSummary(stats *DashboardStats, startOfMonth, startOfDay time.Time) error {
+	if err := database.DB.QueryRow(
+		`SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+		 FROM orders WHERE status != 'cancelled'`,
+	).Scan(&stats.TotalRevenue, &stats.TotalOrders); err != nil {
+		return err
 	}
 
-	// Monthly revenue and orders
-	err = database.DB.QueryRow("SELECT COALESCE(SUM(total_amount), 0), COUNT(*) FROM orders WHERE status != 'cancelled' AND created_at >= $1", startOfMonth).Scan(&stats.MonthlyRevenue, &stats.MonthlyOrders)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	if err := database.DB.QueryRow(
+		`SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+		 FROM orders WHERE status != 'cancelled' AND created_at >= $1`,
+		startOfMonth,
+	).Scan(&stats.MonthlyRevenue, &stats.MonthlyOrders); err != nil {
+		return err
 	}
 
-	// Daily revenue and orders
-	err = database.DB.QueryRow("SELECT COALESCE(SUM(total_amount), 0), COUNT(*) FROM orders WHERE status != 'cancelled' AND created_at >= $1", startOfDay).Scan(&stats.DailyRevenue, &stats.DailyOrders)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	if err := database.DB.QueryRow(
+		`SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
+		 FROM orders WHERE status != 'cancelled' AND created_at >= $1`,
+		startOfDay,
+	).Scan(&stats.DailyRevenue, &stats.DailyOrders); err != nil {
+		return err
 	}
 
-	// Average order value
 	if stats.TotalOrders > 0 {
 		stats.AverageOrderValue = stats.TotalRevenue / float64(stats.TotalOrders)
 	}
 
-	// Orders by status
-	statusRows, err := database.DB.Query("SELECT status, COUNT(*) FROM orders WHERE status IS NOT NULL AND status != '' GROUP BY status")
-	if err == nil {
-		defer statusRows.Close()
-		for statusRows.Next() {
-			var status string
-			var count int
-			statusRows.Scan(&status, &count)
-			stats.OrdersByStatus[status] = count
-		}
-	}
+	return nil
+}
 
-	// Best selling items
-	itemRows, err := database.DB.Query(`
-		SELECT i.name, SUM(oi.quantity) as total_qty, SUM(oi.subtotal) as total_revenue
+// fetchOrdersByStatus populates the OrdersByStatus map.
+func fetchOrdersByStatus(stats *DashboardStats) error {
+	rows, err := database.DB.Query(
+		`SELECT status, COUNT(*) FROM orders
+		 WHERE status IS NOT NULL AND status != ''
+		 GROUP BY status`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			log.Printf("Error scanning order status row: %v", err)
+			continue
+		}
+		stats.OrdersByStatus[status] = count
+	}
+	return rows.Err()
+}
+
+// fetchBestSellingItems populates the BestSellingItems slice.
+func fetchBestSellingItems(stats *DashboardStats) error {
+	rows, err := database.DB.Query(`
+		SELECT i.name, SUM(oi.quantity) AS total_qty, SUM(oi.subtotal) AS total_revenue
 		FROM order_items oi
 		JOIN items i ON oi.item_id = i.id
 		JOIN orders o ON oi.order_id = o.id
 		WHERE o.status != 'cancelled'
 		GROUP BY i.id, i.name
 		ORDER BY total_qty DESC
-		LIMIT 10
-	`)
-	if err == nil {
-		defer itemRows.Close()
-		for itemRows.Next() {
-			var item BestSellingItem
-			if err := itemRows.Scan(&item.Name, &item.Quantity, &item.Revenue); err == nil {
-				stats.BestSellingItems = append(stats.BestSellingItems, item)
-			}
-		}
+		LIMIT $1
+	`, bestSellingItemsLimit)
+	if err != nil {
+		return err
 	}
+	defer rows.Close()
 
-	// Top customers
-	customerRows, err := database.DB.Query(`
+	for rows.Next() {
+		var item BestSellingItem
+		if err := rows.Scan(&item.Name, &item.Quantity, &item.Revenue); err != nil {
+			log.Printf("Error scanning best selling item row: %v", err)
+			continue
+		}
+		stats.BestSellingItems = append(stats.BestSellingItems, item)
+	}
+	return rows.Err()
+}
+
+// fetchTopCustomers populates the TopCustomers slice.
+func fetchTopCustomers(stats *DashboardStats) error {
+	rows, err := database.DB.Query(`
 		SELECT COALESCE(c.name, 'Unknown'), COUNT(*), SUM(o.total_amount)
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
 		WHERE o.status != 'cancelled'
 		GROUP BY o.customer_id, c.name
 		ORDER BY COUNT(*) DESC
-		LIMIT 5
-	`)
-	if err == nil {
-		defer customerRows.Close()
-		for customerRows.Next() {
-			var customer TopCustomer
-			if err := customerRows.Scan(&customer.Name, &customer.OrderCount, &customer.TotalSpent); err == nil {
-				stats.TopCustomers = append(stats.TopCustomers, customer)
-			}
+		LIMIT $1
+	`, topCustomersLimit)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var customer TopCustomer
+		if err := rows.Scan(&customer.Name, &customer.OrderCount, &customer.TotalSpent); err != nil {
+			log.Printf("Error scanning top customer row: %v", err)
+			continue
 		}
+		stats.TopCustomers = append(stats.TopCustomers, customer)
+	}
+	return rows.Err()
+}
+
+// fetchSalesTrend populates the SalesTrend slice for the past salesTrendDays days
+// using a single GROUP BY query instead of one query per day.
+func fetchSalesTrend(stats *DashboardStats, since time.Time) error {
+	rows, err := database.DB.Query(`
+		SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+		       COUNT(*) AS orders,
+		       COALESCE(SUM(total_amount), 0) AS revenue
+		FROM orders
+		WHERE status != 'cancelled' AND created_at >= $1
+		GROUP BY day
+		ORDER BY day ASC
+	`, since)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	// Index query results by date string for O(1) lookup when filling the grid.
+	type dayData struct {
+		orders  int
+		revenue float64
+	}
+	byDate := make(map[string]dayData, salesTrendDays)
+	for rows.Next() {
+		var date string
+		var d dayData
+		if err := rows.Scan(&date, &d.orders, &d.revenue); err != nil {
+			log.Printf("Error scanning sales trend row: %v", err)
+			continue
+		}
+		byDate[date] = d
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
-	// Sales trend - last 30 days
-	for i := 29; i >= 0; i-- {
-		date := now.AddDate(0, 0, -i)
-		startOfDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
-		endOfDate := startOfDate.AddDate(0, 0, 1)
-
-		var revenue float64
-		var orders int
-		err := database.DB.QueryRow(`
-			SELECT COALESCE(SUM(total_amount), 0), COUNT(*)
-			FROM orders
-			WHERE status != 'cancelled' AND created_at >= $1 AND created_at < $2
-		`, startOfDate, endOfDate).Scan(&revenue, &orders)
-		if err != nil {
-			revenue = 0
-			orders = 0
-		}
-
+	// Build a contiguous day-by-day slice, filling zeros for days with no orders.
+	now := time.Now().UTC()
+	for i := salesTrendDays - 1; i >= 0; i-- {
+		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		d := byDate[date] // zero value if date absent
 		stats.SalesTrend = append(stats.SalesTrend, SalesDataPoint{
-			Date:    startOfDate.Format("2006-01-02"),
-			Orders:  orders,
-			Revenue: revenue,
+			Date:    date,
+			Orders:  d.orders,
+			Revenue: d.revenue,
 		})
+	}
+	return nil
+}
+
+// GetDashboardStats returns aggregated statistics for the dashboard page.
+func GetDashboardStats(c *gin.Context) {
+	now := time.Now().UTC()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	salesTrendSince := now.AddDate(0, 0, -(salesTrendDays - 1))
+
+	stats := DashboardStats{
+		OrdersByStatus: make(map[string]int),
+	}
+
+	if err := fetchRevenueSummary(&stats, startOfMonth, startOfDay); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := fetchOrdersByStatus(&stats); err != nil {
+		log.Printf("Error fetching orders by status: %v", err)
+	}
+	if err := fetchBestSellingItems(&stats); err != nil {
+		log.Printf("Error fetching best selling items: %v", err)
+	}
+	if err := fetchTopCustomers(&stats); err != nil {
+		log.Printf("Error fetching top customers: %v", err)
+	}
+	if err := fetchSalesTrend(&stats, salesTrendSince); err != nil {
+		log.Printf("Error fetching sales trend: %v", err)
 	}
 
 	c.JSON(http.StatusOK, stats)
