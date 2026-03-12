@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/models"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -32,20 +31,6 @@ func setupTestDB() (*sql.DB, sqlmock.Sqlmock, error) {
 		return nil, nil, err
 	}
 	return db, mock, nil
-}
-
-// withMockDB sets database.DB to a mock, runs f, then restores the original.
-func withMockDB(t *testing.T, f func(m sqlmock.Sqlmock)) {
-	t.Helper()
-	db, mock, err := setupTestDB()
-	assert.NoError(t, err)
-	defer db.Close()
-
-	original := database.DB
-	database.DB = db
-	defer func() { database.DB = original }()
-
-	f(mock)
 }
 
 // ── Column/query constants ───────────────────────────────────────────────────
