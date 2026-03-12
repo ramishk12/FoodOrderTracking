@@ -193,6 +193,11 @@ function Orders() {
     cancelled: filteredOrders.filter(o => o.status === 'cancelled')
   };
 
+  // Filter statuses to show only the filtered status when statusFilter is active
+  const visibleStatuses = statusFilter 
+    ? Object.keys(groupedOrders).filter(status => status === statusFilter)
+    : Object.keys(groupedOrders);
+
   if (loading) return <div className="loading">Loading orders...</div>;
   if (error) return <div className="error">Error: {error}</div>;
 
@@ -239,7 +244,7 @@ function Orders() {
       </div>
 
       <div className="orders-by-status">
-        {Object.keys(groupedOrders).map((status) => (
+        {visibleStatuses.map((status) => (
           <div key={status} className="status-section">
             <button
               className="status-section-header"
