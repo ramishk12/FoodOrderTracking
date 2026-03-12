@@ -15,22 +15,22 @@ import (
 // ── Query regex constants ────────────────────────────────────────────────────
 
 const (
-	totalRevenueQueryRegex   = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled'`
-	periodRevenueQueryRegex  = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled' AND created_at >=`
-	statusCountQueryRegex    = `SELECT status, COUNT\(\*\) FROM orders`
-	bestSellingQueryRegex    = `SELECT i\.name, SUM\(oi\.quantity\)`
-	topCustomersQueryRegex   = `SELECT COALESCE\(c\.name, 'Unknown'\)`
-	salesTrendQueryRegex     = `SELECT DATE\(created_at AT TIME ZONE 'UTC'\)`
+	totalRevenueQueryRegex  = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled'`
+	periodRevenueQueryRegex = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled' AND created_at >=`
+	statusCountQueryRegex   = `SELECT status, COUNT\(\*\) FROM orders`
+	bestSellingQueryRegex   = `SELECT i\.name, SUM\(oi\.quantity\)`
+	topCustomersQueryRegex  = `SELECT COALESCE\(c\.name, 'Unknown'\)`
+	salesTrendQueryRegex    = `DATE\(created_at AT TIME ZONE 'UTC'\)::text`
 )
 
 // ── Shared column slices ─────────────────────────────────────────────────────
 
 var (
-	revenueCountCols  = []string{"coalesce", "count"}
-	statusCols        = []string{"status", "count"}
-	bestSellingCols   = []string{"name", "total_qty", "total_revenue"}
-	topCustomerCols   = []string{"coalesce", "count", "sum"}
-	salesTrendCols    = []string{"day", "orders", "revenue"}
+	revenueCountCols = []string{"coalesce", "count"}
+	statusCols       = []string{"status", "count"}
+	bestSellingCols  = []string{"name", "total_qty", "total_revenue"}
+	topCustomerCols  = []string{"coalesce", "count", "sum"}
+	salesTrendCols   = []string{"day", "orders", "revenue"}
 )
 
 // ── Mock helpers ─────────────────────────────────────────────────────────────

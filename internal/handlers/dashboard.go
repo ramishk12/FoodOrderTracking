@@ -168,7 +168,7 @@ func fetchTopCustomers(stats *DashboardStats) error {
 // using a single GROUP BY query instead of one query per day.
 func fetchSalesTrend(stats *DashboardStats, since time.Time) error {
 	rows, err := database.DB.Query(`
-		SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+		SELECT DATE(created_at AT TIME ZONE 'UTC')::text AS day,
 		       COUNT(*) AS orders,
 		       COALESCE(SUM(total_amount), 0) AS revenue
 		FROM orders
