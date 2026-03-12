@@ -74,6 +74,28 @@ function Schedule() {
     return 'normal';
   };
 
+  const formatScheduledDate = (scheduledDate) => {
+    if (!scheduledDate) return '';
+    const date = new Date(scheduledDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+    
+    const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    
+    if (dateOnly.getTime() === today.getTime()) {
+      return `Today at ${timeStr}`;
+    } else if (dateOnly.getTime() === tomorrow.getTime()) {
+      return `Tomorrow at ${timeStr}`;
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ` at ${timeStr}`;
+    }
+  };
+
   const statusColors = {
     pending: '#f59e0b',
     preparing: '#3b82f6',
@@ -125,6 +147,9 @@ function Schedule() {
                   <div key={order.id} className={`schedule-order-card ${getOrderDateStatus(order.scheduled_date)}`}>
                     <div className="schedule-order-header">
                       <span className="order-id">Order #{order.id}</span>
+                      <span className="scheduled-time">{formatScheduledDate(order.scheduled_date)}</span>
+                    </div>
+                    <div className="schedule-order-header">
                       <span 
                         className="status-badge" 
                         style={{ backgroundColor: statusColors[order.status] || '#666' }}
