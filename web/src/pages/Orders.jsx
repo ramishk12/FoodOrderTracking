@@ -233,6 +233,7 @@ export default function Orders() {
         customer_id:      order.customer_id,
         delivery_address: order.delivery_address,
         status:           newStatus,
+        payment_method:  order.payment_method,
         total_amount:     order.total_amount,
         notes:            order.notes,
         scheduled_date:   order.scheduled_date,
