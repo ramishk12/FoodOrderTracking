@@ -155,7 +155,9 @@ export default function OrderEdit() {
       setCustomers(updated || []);
       setShowNewCust(false);
       setCustForm(EMPTY_CUST);
-      handleCustomerChange(String(newCust.id));
+      if (newCust?.id) {
+        handleCustomerChange(String(newCust.id));
+      }
     } catch (err) {
       setCustError(err.message);
     } finally {
