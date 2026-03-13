@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"database/sql"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -26,9 +28,18 @@ func scanCustomer(row interface {
 	return c, err
 }
 
+// trimCustomer returns a copy of input with all string fields whitespace-trimmed.
+func trimCustomer(input models.Customer) models.Customer {
+	input.Name = strings.TrimSpace(input.Name)
+	input.Phone = strings.TrimSpace(input.Phone)
+	input.Email = strings.TrimSpace(input.Email)
+	input.Address = strings.TrimSpace(input.Address)
+	return input
+}
+
 // validateCustomer returns false and writes an error response if the input is invalid.
 func validateCustomer(c *gin.Context, input models.Customer) bool {
-	if strings.TrimSpace(input.Name) == "" {
+	if input.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
 		return false
 	}
@@ -71,8 +82,11 @@ func GetCustomer(c *gin.Context) {
 
 	row := database.DB.QueryRow(customerQuery+` WHERE id = $1`, id)
 	customer, err := scanCustomer(row)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Customer not found"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -86,6 +100,7 @@ func CreateCustomer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	input = trimCustomer(input)
 	if !validateCustomer(c, input) {
 		return
 	}
@@ -96,13 +111,18 @@ func CreateCustomer(c *gin.Context) {
 		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`, input.Name, input.Phone, input.Email, input.Address).Scan(&id)
-	if err != nil || id <= 0 {
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	input.ID = id
-	c.JSON(http.StatusCreated, input)
+	created, err := scanCustomer(database.DB.QueryRow(customerQuery+` WHERE id = $1`, id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, created)
 }
 
 // UpdateCustomer updates an existing customer's details by ID.
@@ -118,17 +138,22 @@ func UpdateCustomer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	input = trimCustomer(input)
 	if !validateCustomer(c, input) {
 		return
 	}
 
-	_, err = database.DB.Exec(`
+	result, err := database.DB.Exec(`
 		UPDATE customers
 		SET name = $1, phone = $2, email = $3, address = $4, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $5
 	`, input.Name, input.Phone, input.Email, input.Address, id)
-	if err != nil || id <= 0 {
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Customer not found"})
 		return
 	}
 
@@ -156,10 +181,13 @@ func DeleteCustomer(c *gin.Context) {
 		return
 	}
 
-	if _, err := database.DB.Exec(
-		`DELETE FROM customers WHERE id = $1`, id,
-	); err != nil {
+	delResult, err := database.DB.Exec(`DELETE FROM customers WHERE id = $1`, id)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := delResult.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Customer not found"})
 		return
 	}
 
