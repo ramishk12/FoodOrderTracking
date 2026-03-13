@@ -25,6 +25,8 @@ function OrderEditWrapper() {
 function Navbar() {
   const { pathname } = useLocation()
 
+  const isActive = (path) => path === '/' ? pathname === '/' : pathname.startsWith(path)
+
   return (
     <nav className="nav">
       <Link className="nav-brand" to="/">
@@ -40,7 +42,7 @@ function Navbar() {
           <Link
             key={path}
             to={path}
-            className={`nav-link${pathname === path ? ' active' : ''}`}
+            className={`nav-link${isActive(path) ? ' active' : ''}`}
           >
             {label}
           </Link>
