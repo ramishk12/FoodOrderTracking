@@ -202,18 +202,16 @@ function OrderEdit() {
        // We need to convert to UTC before sending to backend
        let scheduledDateISO = null;
        if (formData.scheduled_date) {
-         // Parse the local datetime string and convert to UTC
-         // Split the datetime-local value into date and time parts
-         const [datePart, timePart] = formData.scheduled_date.split('T');
-         const [year, month, day] = datePart.split('-').map(Number);
-         const [hours, minutes] = timePart.split(':').map(Number);
-         
-         // Create a date in local timezone
-         const localDate = new Date(year, month - 1, day, hours, minutes, 0);
-         
-         // Get the UTC time by using toISOString() on the local date
-         // This gives us the equivalent UTC time
-         scheduledDateISO = localDate.toISOString();
+         // Parse the local datetime and convert to UTC
+         const localDate = new Date(formData.scheduled_date);
+         // Get UTC components
+         const year = localDate.getUTCFullYear();
+         const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+         const day = String(localDate.getUTCDate()).padStart(2, '0');
+         const hours = String(localDate.getUTCHours()).padStart(2, '0');
+         const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+         const seconds = '00';
+         scheduledDateISO = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}Z`;
        }
       
       // Update order with new data
