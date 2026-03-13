@@ -179,16 +179,6 @@ body {
   font-size: 0.9rem;
 }
 
-.rating {
-  color: #f59e0b;
-  font-weight: bold;
-}
-
-.user-id {
-  color: #999;
-  font-size: 0.8rem;
-}
-
 .form {
   background: #fff;
   padding: 1.5rem;
@@ -253,22 +243,6 @@ body {
 
 .error {
   color: #ef4444;
-}
-
-.container {
-  text-align: center;
-  padding: 4rem 2rem;
-}
-
-.container h1 {
-  font-size: 2.5rem;
-  color: #333;
-  margin-bottom: 1rem;
-}
-
-.container p {
-  font-size: 1.1rem;
-  color: #666;
 }
 
 .category-section {
