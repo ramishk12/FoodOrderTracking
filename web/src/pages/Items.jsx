@@ -274,6 +274,7 @@ export default function Items() {
     setOrderForm(EMPTY_ORDER_FORM);
     setOrderFormError(null);
     setOrderHistory([]);
+    resetQty();
   };
 
   const handleCustomerChange = async (customerId) => {
