@@ -326,9 +326,13 @@ export default function OrderEdit() {
                           <span className="oe-hist-date">{fmtDate(o.created_at)}</span>
                         </div>
                         <div className="oe-hist-items">
-                          {o.order_items?.length
-                            ? o.order_items.map((i) => `${i.quantity}× ${i.item_name}`).join(', ')
-                            : 'No items'}
+                          {o.order_items?.length > 0 ? (
+                            <div>
+                              {o.order_items.map((i) => (
+                                <div key={i.item_id}>{i.quantity}× {i.item_name}</div>
+                              ))}
+                            </div>
+                          ) : 'No items'}
                         </div>
                         <div className="oe-hist-footer">
                           <span className="oe-hist-total">{fmtUsd(o.total_amount)}</span>
