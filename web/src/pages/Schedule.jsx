@@ -5,6 +5,8 @@ import '../index.css';
 
 /* ─── Constants ─────────────────────────────── */
 
+const WINDOWS = [3, 7, 14, 30];
+
 const STATUS_COLORS = {
   pending:   '#c47c2b',
   preparing: '#2b5fa0',
