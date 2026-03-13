@@ -1,348 +1,410 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import '../index.css';
 
-function Orders() {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+/* ─── Status config ──────────────────────── */
+
+const STATUSES = ['pending', 'preparing', 'ready', 'delivered', 'cancelled'];
+
+const STATUS_CONFIG = {
+  pending:   { label: 'Pending',   color: '#b45309', bg: '#fef3c7', border: '#fde68a' },
+  preparing: { label: 'Preparing', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
+  ready:     { label: 'Ready',     color: '#6d28d9', bg: '#f5f3ff', border: '#ddd6fe' },
+  delivered: { label: 'Delivered', color: '#065f46', bg: '#ecfdf5', border: '#a7f3d0' },
+  cancelled: { label: 'Cancelled', color: '#991b1b', bg: '#fff1f2', border: '#fecdd3' },
+};
+
+const DEFAULT_EXPANDED = { pending: true, preparing: true, ready: true, delivered: false, cancelled: false };
+
+/* ─── Helpers ────────────────────────────── */
+
+function fmtUsd(n) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(n ?? 0);
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
+}
+
+/* ─── StatusPill ─────────────────────────── */
+
+function StatusPill({ status }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status, color: '#666', bg: '#f3f4f6', border: '#e5e7eb' };
+  return (
+    <span className="ord-status-pill" style={{
+      color: cfg.color, background: cfg.bg, borderColor: cfg.border,
+    }}>
+      <span className="ord-status-dot" style={{ background: cfg.color }} />
+      {cfg.label}
+    </span>
+  );
+}
+
+/* ─── ConfirmDialog ──────────────────────── */
+
+function ConfirmDialog({ orderId, onConfirm, onCancel }) {
+  return (
+    <div className="ord-overlay" onClick={onCancel}>
+      <div className="ord-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="ord-dialog-title">Delete order?</div>
+        <div className="ord-dialog-body">
+          Order <strong>#{orderId}</strong> will be permanently removed. This cannot be undone.
+        </div>
+        <div className="ord-dialog-actions">
+          <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn-primary" style={{ background: 'var(--red)' }} onClick={onConfirm}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── OrderCard ──────────────────────────── */
+
+function OrderCard({ order, onStatusChange, onDelete, delay }) {
+  return (
+    <div className="ord-card" style={{ animationDelay: `${delay}ms` }}>
+      <div className="ord-card-top">
+        <span className="ord-card-id">Order #{order.id}</span>
+        <StatusPill status={order.status} />
+      </div>
+
+      <div className="ord-card-body">
+        <div className={`ord-customer${!order.customer_name ? ' anonymous' : ''}`}>
+          {order.customer_name || 'No customer'}
+        </div>
+
+        {[
+          { label: 'Phone',   value: order.customer_phone },
+          { label: 'Address', value: order.delivery_address },
+          { label: 'Payment', value: order.payment_method === 'e-transfer' ? 'e-Transfer' : order.payment_method ? 'Cash' : null },
+          { label: 'Notes',   value: order.notes },
+        ].map(({ label, value }) => value ? (
+          <div key={label} className="ord-detail">
+            <span className="ord-detail-label">{label}</span>
+            <span className="ord-detail-value">{value}</span>
+          </div>
+        ) : null)}
+
+        {/* Items */}
+        {order.order_items?.length > 0 && (
+          <div className="ord-detail" style={{ alignItems: 'flex-start' }}>
+            <span className="ord-detail-label">Items</span>
+            <div className="ord-items">
+              {order.order_items.map((item, i) => (
+                <div key={i} className="ord-item-row">
+                  <span className="ord-item-qty">{item.quantity}×</span>
+                  <span>{item.item_name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Timestamps */}
+        {order.scheduled_date && (
+          <div className="ord-detail">
+            <span className="ord-detail-label">Sched.</span>
+            <span className="ord-detail-value">{fmtDateTime(order.scheduled_date)}</span>
+          </div>
+        )}
+        <div className="ord-detail">
+          <span className="ord-detail-label">Created</span>
+          <span className="ord-detail-value">{fmtDateTime(order.created_at)}</span>
+        </div>
+        {order.updated_at && order.updated_at !== order.created_at && (
+          <div className="ord-detail">
+            <span className="ord-detail-label">Updated</span>
+            <span className="ord-detail-value">{fmtDateTime(order.updated_at)}</span>
+          </div>
+        )}
+
+        <div className="ord-total">
+          <span className="ord-total-label">Total</span>
+          <span className="ord-total-value">{fmtUsd(order.total_amount)}</span>
+        </div>
+      </div>
+
+      <div className="ord-card-footer">
+        <Link to={`/orders/${order.id}/edit`} className="btn-primary">Edit</Link>
+        <select
+          className="ord-status-select"
+          value={order.status}
+          onChange={(e) => onStatusChange(order, e.target.value)}
+        >
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+          ))}
+        </select>
+        <button className="btn-danger" onClick={() => onDelete(order)}>Delete</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── StatusSection ──────────────────────── */
+
+function StatusSection({ status, orders, expanded, onToggle, onStatusChange, onDelete }) {
+  const cfg = STATUS_CONFIG[status];
+  return (
+    <div className="ord-section">
+      <button
+        className="ord-section-head"
+        style={{ borderLeftColor: cfg.color }}
+        onClick={onToggle}
+      >
+        <ChevronIcon open={expanded} />
+        <span className="ord-status-dot ord-section-dot" style={{ background: cfg.color }} />
+        <span className="ord-section-label" style={{ color: cfg.color }}>{cfg.label}</span>
+        <span className="ord-section-count">{orders.length}</span>
+      </button>
+
+      {expanded && (
+        <div className="ord-section-body">
+          {orders.length === 0 ? (
+            <div className="ord-empty-section">No {cfg.label.toLowerCase()} orders</div>
+          ) : (
+            <div className="ord-grid">
+              {orders.map((order, i) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  delay={i * 35}
+                  onStatusChange={onStatusChange}
+                  onDelete={onDelete}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Orders ─────────────────────────────── */
+
+export default function Orders() {
+  const [orders, setOrders]     = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+  const [search, setSearch]     = useState('');
+  const [statusFilter, setStatusFilter]   = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
-  const [expandedSections, setExpandedSections] = useState({
-    pending: true,
-    preparing: true,
-    ready: true,
-    delivered: false,
-    cancelled: false
-  });
-  const [formData, setFormData] = useState({
-    customer_id: '',
-    delivery_address: '',
-    total_amount: '',
-    notes: '',
-    scheduled_date: ''
-  });
-  const [customerData, setCustomerData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    address: ''
-  });
-  const [editingId, setEditingId] = useState(null);
-  const [showForm, setShowForm] = useState(false);
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [customers, setCustomers] = useState([]);
+  const [expanded, setExpanded] = useState(DEFAULT_EXPANDED);
+  const [deleteTarget, setDeleteTarget]   = useState(null);
+  const [toast, setToast]       = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  /* ── Load ── */
+  const load = useCallback(async () => {
     try {
-      setLoading(true);
-      const [ordersData, customersData] = await Promise.all([
-        api.getOrders(),
-        api.getCustomers()
-      ]);
-      setOrders(ordersData);
-      setCustomers(customersData);
+      setLoading(true); setError(null);
+      const data = await api.getOrders();
+      setOrders(data || []);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  /* ── Toast ── */
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  /* ── Status change ── */
+  const handleStatusChange = async (order, newStatus) => {
     try {
-      const amount = parseFloat(formData.total_amount);
-      if (isNaN(amount) || amount <= 0) {
-        alert('Please enter a valid total amount');
-        return;
-      }
-      const data = {
-        ...formData,
-        customer_id: parseInt(formData.customer_id) || null,
-        total_amount: amount,
-        status: 'pending',
-        scheduled_date: formData.scheduled_date ? formData.scheduled_date + ':00Z' : null
-      };
-      if (editingId) {
-        await api.updateOrder(editingId, data);
-      } else {
-        await api.createOrder(data);
-      }
-      handleCancel();
-      loadData();
+      await api.updateOrder(order.id, {
+        customer_id:      order.customer_id,
+        delivery_address: order.delivery_address,
+        status:           newStatus,
+        total_amount:     order.total_amount,
+        notes:            order.notes,
+        scheduled_date:   order.scheduled_date,
+      });
+      load();
     } catch (err) {
-      alert(err.message);
+      showToast(err.message, 'error');
     }
   };
 
-  const handleCustomerSubmit = async (e) => {
-    e.preventDefault();
+  /* ── Delete ── */
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.createCustomer(customerData);
-      setShowCustomerForm(false);
-      setCustomerData({ name: '', phone: '', email: '', address: '' });
-      loadData();
+      await api.deleteOrder(deleteTarget.id);
+      setDeleteTarget(null);
+      showToast('Order deleted');
+      load();
     } catch (err) {
-      alert(err.message);
+      setDeleteTarget(null);
+      showToast(err.message, 'error');
     }
   };
 
-  const handleEdit = (order) => {
-    setFormData({
-      customer_id: order.customer_id ? String(order.customer_id) : '',
-      delivery_address: order.delivery_address || '',
-      total_amount: String(order.total_amount) || '',
-      notes: order.notes,
-      payment_method: order.payment_method || '',
-      scheduled_date: order.scheduled_date ? order.scheduled_date.split('T')[0] : ''
-    });
-    setEditingId(order.id);
-    setShowForm(true);
-  };
-
-  const handleCancel = () => {
-    setShowForm(false);
-    setEditingId(null);
-    setShowCustomerForm(false);
-    setFormData({ customer_id: '', delivery_address: '', total_amount: '', notes: '', scheduled_date: '' });
-  };
-
-  const handleCustomerChange = (customerId) => {
-    const customer = customers.find(c => c.id === parseInt(customerId));
-    setFormData(prev => ({
-      ...prev,
-      customer_id: customerId,
-      delivery_address: customer?.address || prev.delivery_address
-    }));
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this order?')) return;
-    try {
-      await api.deleteOrder(id);
-      loadData();
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-
-  const statusColors = {
-    pending: '#f59e0b',
-    preparing: '#3b82f6',
-    ready: '#8b5cf6',
-    delivered: '#10b981',
-    cancelled: '#ef4444',
-  };
-
-  const statusLabels = {
-    pending: 'Pending',
-    preparing: 'Preparing',
-    ready: 'Ready',
-    delivered: 'Delivered',
-    cancelled: 'Cancelled'
-  };
-
-  const toggleSection = (status) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [status]: !prev[status]
-    }));
-  };
-
-  const expandAllSections = () => {
-    setExpandedSections({
-      pending: true,
-      preparing: true,
-      ready: true,
-      delivered: true,
-      cancelled: true
-    });
-  };
-
-  const collapseAllSections = () => {
-    setExpandedSections({
-      pending: false,
-      preparing: false,
-      ready: false,
-      delivered: false,
-      cancelled: false
-    });
-  };
-
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = !searchTerm || 
-      order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.delivery_address?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = !statusFilter || order.status === statusFilter;
-    const matchesPayment = !paymentFilter || order.payment_method === paymentFilter;
-    return matchesSearch && matchesStatus && matchesPayment;
+  /* ── Filter ── */
+  const filtered = orders.filter((o) => {
+    const s = search.toLowerCase();
+    const matchSearch  = !search || o.customer_name?.toLowerCase().includes(s) || o.delivery_address?.toLowerCase().includes(s);
+    const matchStatus  = !statusFilter  || o.status          === statusFilter;
+    const matchPayment = !paymentFilter || o.payment_method  === paymentFilter;
+    return matchSearch && matchStatus && matchPayment;
   });
 
-  // Group filtered orders by status
-  const groupedOrders = {
-    pending: filteredOrders.filter(o => o.status === 'pending'),
-    preparing: filteredOrders.filter(o => o.status === 'preparing'),
-    ready: filteredOrders.filter(o => o.status === 'ready'),
-    delivered: filteredOrders.filter(o => o.status === 'delivered'),
-    cancelled: filteredOrders.filter(o => o.status === 'cancelled')
-  };
+  const grouped = Object.fromEntries(
+    STATUSES.map((s) => [s, filtered.filter((o) => o.status === s)])
+  );
 
-  // Filter statuses to show only the filtered status when statusFilter is active
-  const visibleStatuses = statusFilter 
-    ? Object.keys(groupedOrders).filter(status => status === statusFilter)
-    : Object.keys(groupedOrders);
+  const visibleStatuses = statusFilter ? [statusFilter] : STATUSES;
 
-  if (loading) return <div className="loading">Loading orders...</div>;
-  if (error) return <div className="error">Error: {error}</div>;
+  /* ── Expand / collapse ── */
+  const toggleSection  = (s) => setExpanded((p) => ({ ...p, [s]: !p[s] }));
+  const expandAll      = () => setExpanded(Object.fromEntries(STATUSES.map((s) => [s, true])));
+  const collapseAll    = () => setExpanded(Object.fromEntries(STATUSES.map((s) => [s, false])));
 
+  /* ── Render ── */
   return (
-    <div className="page">
-      <div className="page-header">
-        <h1>Orders</h1>
-      </div>
+    <>
+      <div className="ord-root">
 
-      <div className="filters">
-        <input
-          type="text"
-          placeholder="Search by customer or address..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="search-input"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="filter-select"
-        >
-          <option value="">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="preparing">Preparing</option>
-          <option value="ready">Ready</option>
-          <option value="delivered">Delivered</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-        <select
-          value={paymentFilter}
-          onChange={(e) => setPaymentFilter(e.target.value)}
-          className="filter-select"
-        >
-          <option value="">All Payment Methods</option>
-          <option value="cash">Cash</option>
-          <option value="e-transfer">e-Transfer</option>
-        </select>
-      </div>
+        {toast && <div className={`ord-toast ${toast.type}`}>{toast.msg}</div>}
 
-      <div className="section-controls">
-        <button className="btn-secondary" onClick={expandAllSections}>Expand All</button>
-        <button className="btn-secondary" onClick={collapseAllSections}>Collapse All</button>
-      </div>
+        {deleteTarget && (
+          <ConfirmDialog
+            orderId={deleteTarget.id}
+            onConfirm={confirmDelete}
+            onCancel={() => setDeleteTarget(null)}
+          />
+        )}
 
-      <div className="orders-by-status">
-        {visibleStatuses.map((status) => (
-          <div key={status} className="status-section">
-            <button
-              className="status-section-header"
-              onClick={() => toggleSection(status)}
-              style={{ borderLeftColor: statusColors[status] }}
-            >
-              <span className="section-toggle">
-                {expandedSections[status] ? '▼' : '▶'}
-              </span>
-              <span className="section-title">{statusLabels[status]}</span>
-              <span className="section-count">({groupedOrders[status].length})</span>
-            </button>
-            
-            {expandedSections[status] && (
-              <div className="status-section-content">
-                {groupedOrders[status].length === 0 ? (
-                  <p className="empty-section">No {statusLabels[status].toLowerCase()} orders</p>
-                ) : (
-                  <div className="card-grid">
-                    {groupedOrders[status].map((order) => (
-                      <div key={order.id} className="card">
-                        <div className="card-header">
-                          <span className="order-id">Order #{order.id}</span>
-                          <span 
-                            className="status-badge"
-                            style={{ backgroundColor: statusColors[order.status] || '#666' }}
-                          >
-                            {order.status}
-                          </span>
-                        </div>
-                        <div className="card-body">
-                          <p><strong>Customer:</strong> {order.customer_name || 'No Customer'}</p>
-                          <p><strong>Phone:</strong> {order.customer_phone || 'N/A'}</p>
-                          <p><strong>Address:</strong> {order.delivery_address}</p>
-                          <div className="order-items-list">
-                            <strong>Items:</strong>
-                            {order.order_items && order.order_items.length > 0 ? (
-                              <ul>
-                                {order.order_items.map((item, index) => (
-                                  <li key={index}>{item.quantity}x {item.item_name}</li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <span className="no-items">No items</span>
-                            )}
-                          </div>
-                           <p><strong>Total:</strong> ${order.total_amount}</p>
-                            <p><strong>Payment Method:</strong> {order.payment_method === 'e-transfer' ? 'e-Transfer' : 'Cash'}</p>
-                            {order.notes && <p><strong>Notes:</strong> {order.notes}</p>}
-                             {order.scheduled_date && (
-                               <p><strong>Scheduled:</strong> {new Date(order.scheduled_date).toLocaleString('en-US')}</p>
-                             )}
-                            {order.created_at && <p><strong>Created:</strong> {new Date(order.created_at).toLocaleString('en-US')}</p>}
-                            {order.updated_at && order.updated_at !== order.created_at && (
-                            <p><strong>Updated:</strong> {new Date(order.updated_at).toLocaleString('en-US')}</p>
-                            )}
-                        </div>
-                        <div className="card-actions">
-                          <Link to={`/orders/${order.id}/edit`} className="btn-primary">Edit</Link>
-                          <select
-                            value={order.status}
-                            onChange={async (e) => {
-                              try {
-                                await api.updateOrder(order.id, {
-                                  customer_id: order.customer_id,
-                                  delivery_address: order.delivery_address,
-                                  status: e.target.value,
-                                  total_amount: order.total_amount,
-                                  notes: order.notes,
-                                  scheduled_date: order.scheduled_date
-                                });
-                                loadData();
-                              } catch (err) {
-                                alert(err.message);
-                              }
-                            }}
-                            className="status-select"
-                          >
-                            <option value="pending">Pending</option>
-                            <option value="preparing">Preparing</option>
-                            <option value="ready">Ready</option>
-                            <option value="delivered">Delivered</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                          <button className="btn-danger" onClick={() => handleDelete(order.id)}>Delete</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+        {/* Header */}
+        <div className="ord-header">
+          <div>
+            <h1 className="ord-title">All <em>Orders</em></h1>
+            <div className="ord-meta">
+              {orders.length} order{orders.length !== 1 ? 's' : ''}
+              {filtered.length !== orders.length && ` · ${filtered.length} shown`}
+            </div>
+          </div>
+        </div>
+
+        {loading && (
+          <div className="ord-load">
+            <div className="ord-spinner" />
+            <span className="ord-load-text">Loading orders…</span>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="ord-error">
+            <p className="ord-error-msg">{error}</p>
+            <button className="ord-retry" onClick={load}>Try again</button>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <>
+            {/* Filters */}
+            <div className="ord-filters">
+              <div className="ord-search-wrap">
+                <span className="ord-search-icon"><SearchIcon /></span>
+                <input
+                  className="ord-search"
+                  type="text"
+                  placeholder="Search customer or address…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <select className="ord-select" value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">All statuses</option>
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                ))}
+              </select>
+              <select className="ord-select" value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}>
+                <option value="">All payments</option>
+                <option value="cash">Cash</option>
+                <option value="e-transfer">e-Transfer</option>
+              </select>
+            </div>
+
+            {/* Section controls */}
+            <div className="ord-controls">
+              <button className="btn-ghost" onClick={expandAll}>Expand all</button>
+              <button className="btn-ghost" onClick={collapseAll}>Collapse all</button>
+            </div>
+
+            {/* Empty state */}
+            {orders.length === 0 && (
+              <div className="ord-empty">
+                <span style={{ fontSize: 32, opacity: 0.25 }}>✦</span>
+                <div className="ord-empty-title">No orders yet</div>
+                <div className="ord-empty-sub">Orders placed from the Menu page will appear here.</div>
               </div>
             )}
-          </div>
-        ))}
+
+            {orders.length > 0 && filtered.length === 0 && (
+              <div className="ord-empty">
+                <div className="ord-empty-title">No results</div>
+                <div className="ord-empty-sub">Try adjusting your filters.</div>
+              </div>
+            )}
+
+            {/* Status sections */}
+            {filtered.length > 0 && visibleStatuses.map((status) => (
+              <StatusSection
+                key={status}
+                status={status}
+                orders={grouped[status]}
+                expanded={expanded[status]}
+                onToggle={() => toggleSection(status)}
+                onStatusChange={handleStatusChange}
+                onDelete={(order) => setDeleteTarget(order)}
+              />
+            ))}
+          </>
+        )}
+
       </div>
-      {filteredOrders.length === 0 && <p className="empty">No orders matching your filters</p>}
-    </div>
+    </>
   );
 }
 
-export default Orders;
+/* ─── Icons ──────────────────────────────── */
+
+function ChevronIcon({ open }) {
+  return (
+    <svg className={`ord-section-chevron${open ? ' open' : ''}`}
+      width="14" height="14" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+  );
+}
