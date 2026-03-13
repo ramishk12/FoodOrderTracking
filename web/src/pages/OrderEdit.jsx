@@ -218,6 +218,7 @@ function OrderEdit() {
       await api.updateOrder(parseInt(id), {
         customer_id: parseInt(formData.customer_id) || null,
         delivery_address: formData.delivery_address,
+        status: order?.status || 'pending',
         notes: formData.notes,
         payment_method: formData.payment_method,
         total_amount: calculateTotal(),

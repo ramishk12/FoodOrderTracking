@@ -392,6 +392,9 @@ func UpdateOrder(c *gin.Context) {
 	if input.PaymentMethod == "" {
 		input.PaymentMethod = "cash"
 	}
+	if input.Status == "" {
+		input.Status = "pending"
+	}
 	if !validateOrderStatus(c, input.Status) {
 		return
 	}

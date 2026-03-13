@@ -313,7 +313,8 @@ function Orders() {
                                   delivery_address: order.delivery_address,
                                   status: e.target.value,
                                   total_amount: order.total_amount,
-                                  notes: order.notes
+                                  notes: order.notes,
+                                  scheduled_date: order.scheduled_date
                                 });
                                 loadData();
                               } catch (err) {
