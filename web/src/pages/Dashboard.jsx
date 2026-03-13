@@ -78,8 +78,14 @@ function TrendChart({ data, mode }) {
   const iW = W - PAD.l - PAD.r;
   const iH = H - PAD.t - PAD.b;
 
-  const vals = data.map((d) => mode === 'revenue' ? d.revenue : d.orders);
-  const maxV = Math.max(...vals, 1);
+  const vals = data.map((d) => Number(mode === 'revenue' ? d.revenue : d.orders) || 0);
+  const rawMax = Math.max(...vals);
+  const maxV = (() => {
+    if (rawMax <= 0) return 2;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)));
+    const rawCeil = Math.ceil(rawMax / magnitude) * magnitude;
+    return Math.max(Math.ceil(rawCeil / 2), 1);
+  })();
   const step = Math.ceil(data.length / 7);
 
   const pts = data.map((d, i) => ({
