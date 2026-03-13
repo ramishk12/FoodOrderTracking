@@ -493,9 +493,13 @@ export default function Items() {
                                 <span className="ord-hist-date">{fmtDate(order.created_at)}</span>
                               </div>
                               <div className="ord-hist-items">
-                                {order.order_items?.length
-                                  ? order.order_items.map((i) => `${i.quantity}× ${i.item_name}`).join(', ')
-                                  : 'No items'}
+                                {order.order_items?.length > 0 ? (
+                                  <div>
+                                    {order.order_items.map((i) => (
+                                      <div key={i.item_id}>{i.quantity}× {i.item_name}</div>
+                                    ))}
+                                  </div>
+                                ) : 'No items'}
                               </div>
                               <div className="ord-hist-footer">
                                 <span className="ord-hist-total">{fmtUsd(order.total_amount)}</span>
