@@ -70,7 +70,10 @@ function groupOrders(orders) {
     if (ai !== -1 && bi !== -1) return ai - bi;
     if (ai !== -1) return -1;
     if (bi !== -1) return 1;
-    return 0;
+    // Both are far-future date labels — sort by the date of the first order in each group
+    const aDate = new Date(groups[a][0].scheduled_date);
+    const bDate = new Date(groups[b][0].scheduled_date);
+    return aDate - bDate;
   });
 
   return keys.map((label) => ({ label, orders: groups[label] }));
