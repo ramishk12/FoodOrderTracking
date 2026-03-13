@@ -2832,3 +2832,85 @@ body {
   .itm-form-body .full { grid-column: 1; }
   .ord-body { grid-template-columns: 1fr; }
 }
+
+/* Navigation - Warm editorial design */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--espresso);
+  display: flex; align-items: center;
+  padding: 0 32px;
+  height: 56px;
+  gap: 32px;
+}
+
+.nav-brand {
+  display: flex; align-items: baseline; gap: 6px;
+  text-decoration: none; flex-shrink: 0;
+}
+.nav-brand-word {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 700;
+  color: var(--cream);
+  letter-spacing: -0.3px; line-height: 1;
+}
+.nav-brand-word em {
+  font-style: italic; color: var(--amber);
+}
+.nav-brand-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--amber); opacity: 0.6;
+  flex-shrink: 0; margin-bottom: 2px;
+}
+
+.nav-divider {
+  width: 1px; height: 24px;
+  background: rgba(212,201,180,0.15);
+  flex-shrink: 0;
+}
+
+.nav-links {
+  display: flex; align-items: center;
+  gap: 2px; flex: 1;
+}
+
+.nav-link {
+  position: relative;
+  padding: 6px 12px;
+  border-radius: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: rgba(245,240,232,0.5);
+  text-decoration: none;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.nav-link:hover {
+  color: rgba(245,240,232,0.85);
+  background: rgba(245,240,232,0.06);
+}
+.nav-link.active {
+  color: var(--cream);
+  background: rgba(245,240,232,0.10);
+}
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 12px; right: 12px;
+  height: 2px; border-radius: 1px;
+  background: var(--amber);
+}
+
+/* Main */
+.app-main {
+  min-height: calc(100vh - 56px);
+}
+
+/* Mobile */
+@media (max-width: 680px) {
+  .nav { padding: 0 16px; gap: 12px; height: auto; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; }
+  .nav-divider { display: none; }
+  .nav-links { gap: 0; flex-wrap: wrap; }
+  .nav-link { font-size: 10px; padding: 5px 9px; }
+  .nav-brand-word { font-size: 16px; }
+}
