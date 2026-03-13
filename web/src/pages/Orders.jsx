@@ -102,7 +102,7 @@ function OrderCard({ order, onStatusChange, onDelete, delay }) {
             <span className="ord-detail-label">Items</span>
             <div className="ord-items">
               {order.order_items.map((item, i) => (
-                <div key={i} className="ord-item-row">
+                <div key={item.item_id ?? i} className="ord-item-row">
                   <span className="ord-item-qty">{item.quantity}×</span>
                   <span>{item.item_name}</span>
                 </div>
