@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -71,8 +70,7 @@ func TestGetCustomers(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
-				// Should return null or [] — either is valid JSON for an empty slice
-				assert.Contains(t, []string{"null", "[]"}, strings.TrimSpace(w.Body.String()))
+				assert.Equal(t, "[]", strings.TrimSpace(w.Body.String()))
 			},
 		},
 		{
@@ -201,33 +199,18 @@ func TestGetCustomer(t *testing.T) {
 			},
 		},
 		{
-			name:       "Returns 404 when customer not found",
-			customerID: "999",
-			setupMock: func(m sqlmock.Sqlmock) {
-				m.ExpectQuery(customerQueryRegex).
-					WithArgs(999).
-					WillReturnError(sql.ErrNoRows)
-			},
-			expectedStatus: http.StatusNotFound,
-			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
-				var resp map[string]string
-				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-				assert.Equal(t, "Customer not found", resp["error"])
-			},
-		},
-		{
-			name:       "Returns 404 on any database error",
+			name:       "Returns 500 on database error",
 			customerID: "1",
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectQuery(customerQueryRegex).
 					WithArgs(1).
 					WillReturnError(fmt.Errorf("connection lost"))
 			},
-			expectedStatus: http.StatusNotFound,
+			expectedStatus: http.StatusInternalServerError,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-				assert.Equal(t, "Customer not found", resp["error"])
+				assert.NotEmpty(t, resp["error"])
 			},
 		},
 	}
@@ -344,6 +327,34 @@ func TestCreateCustomer(t *testing.T) {
 				assert.NotEmpty(t, resp["error"])
 			},
 		},
+		{
+			name: "Handles duplicate customer gracefully",
+			body: `{"name":"Duplicate","phone":"555-9999","email":"exists@example.com","address":"123 St"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(insertCustomerQueryRegex).
+					WillReturnError(fmt.Errorf("duplicate key value violates unique constraint"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
+		},
+		{
+			name: "Handles extremely long name gracefully",
+			body: fmt.Sprintf(`{"name":"%s","phone":"555-1234"}`, strings.Repeat("A", 1000)),
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(insertCustomerQueryRegex).
+					WillReturnError(fmt.Errorf("string too long for name column"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.NotEmpty(t, resp["error"])
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -447,6 +458,7 @@ func TestUpdateCustomer(t *testing.T) {
 			body:       `{"name":"John Doe"}`,
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectExec(updateCustomerExecRegex).
+					WithArgs("John Doe", "", "", "", 1).
 					WillReturnError(fmt.Errorf("deadlock detected"))
 			},
 			expectedStatus: http.StatusInternalServerError,
@@ -454,6 +466,22 @@ func TestUpdateCustomer(t *testing.T) {
 				var resp map[string]string
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.NotEmpty(t, resp["error"])
+			},
+		},
+		{
+			name:       "Returns 404 when customer does not exist",
+			customerID: "999",
+			body:       `{"name":"Ghost Customer"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectExec(updateCustomerExecRegex).
+					WithArgs("Ghost Customer", "", "", "", 999).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+			},
+			expectedStatus: http.StatusNotFound,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Customer not found", resp["error"])
 			},
 		},
 	}
@@ -569,8 +597,7 @@ func TestDeleteCustomer(t *testing.T) {
 			},
 		},
 		{
-			// Deleting a non-existent customer is idempotent — still returns 200
-			name:       "Deletes non-existent customer without error",
+			name:       "Returns 404 when customer does not exist",
 			customerID: "999",
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectQuery(orderCountQueryRegex).
@@ -580,11 +607,11 @@ func TestDeleteCustomer(t *testing.T) {
 					WithArgs(999).
 					WillReturnResult(sqlmock.NewResult(0, 0))
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-				assert.Equal(t, "Customer deleted", resp["message"])
+				assert.Equal(t, "Customer not found", resp["error"])
 			},
 		},
 	}
