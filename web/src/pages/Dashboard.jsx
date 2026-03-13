@@ -72,14 +72,25 @@ function TrendChart({ data, mode }) {
   }, [data]);
 
   if (!data?.length) return <div className="db-empty">No trend data available</div>;
+  if (data.length < 2) return <div className="db-empty">Not enough data to chart</div>;
 
   const W = 720, H = 160;
   const PAD = { t: 12, r: 12, b: 32, l: 56 };
   const iW = W - PAD.l - PAD.r;
   const iH = H - PAD.t - PAD.b;
 
-  const vals = data.map((d) => mode === 'revenue' ? d.revenue : d.orders);
-  const maxV = Math.max(...vals, 1);
+  const vals = data.map((d) => Number(mode === 'revenue' ? d.revenue : d.orders) || 0);
+  const rawMax = Math.max(...vals.map(v => Number(v) || 0), 0);
+  // Compute a "nice" ceiling that guarantees all three ticks (0, 50%, 100%) are distinct.
+  // When rawMax is 0 or very small, fall back to a minimum scale of 2 so ticks are 0 / 1 / 2.
+  const niceMax = (() => {
+    if (rawMax <= 0) return 2;
+    const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
+    const ceil = Math.ceil(rawMax / mag) * mag;
+    // ceil can equal rawMax when rawMax is an exact power of 10; bump it up one step
+    return Math.max(ceil, rawMax + mag);
+  })();
+  const maxV = niceMax;
   const step = Math.ceil(data.length / 7);
 
   const pts = data.map((d, i) => ({
