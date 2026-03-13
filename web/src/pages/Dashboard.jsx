@@ -392,7 +392,7 @@ export default function Dashboard() {
                 <KpiCard label="Daily Revenue"   value={s.daily_revenue}      isCurrency delay={120} accent />
                 <KpiCard label="Avg Order Value" value={s.average_order_value} isCurrency delay={180} />
                 <KpiCard label="Total Orders"    value={s.total_orders}       delay={240}
-                  sub={`${s.monthly_orders} this month`} />
+                  sub={`${fmt.num(s.monthly_orders ?? 0)} this month`} />
                 <KpiCard label="Today's Orders"  value={s.daily_orders}       delay={300}
                   sub={`${fmt.usd(s.daily_revenue)} revenue`} />
               </div>
