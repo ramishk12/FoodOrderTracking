@@ -6,6 +6,16 @@ import Orders from './pages/Orders'
 import OrderEdit from './pages/OrderEdit'
 import Customers from './pages/Customers'
 import Items from './pages/Items'
+import './index.css'
+
+const LINKS = [
+  { path: '/',          label: 'Home' },
+  { path: '/dashboard', label: 'Dashboard' },
+  { path: '/schedule',  label: 'Schedule' },
+  { path: '/items',     label: 'Menu' },
+  { path: '/orders',    label: 'Orders' },
+  { path: '/customers', label: 'Customers' },
+]
 
 function OrderEditWrapper() {
   const location = useLocation()
@@ -13,28 +23,26 @@ function OrderEditWrapper() {
 }
 
 function Navbar() {
-  const location = useLocation()
-  
-  const links = [
-    { path: '/', label: 'Home' },
-    { path: '/dashboard', label: 'Dashboard' },
-    { path: '/schedule', label: 'Schedule' },
-    { path: '/items', label: 'Menu' },
-    { path: '/orders', label: 'Orders' },
-    { path: '/customers', label: 'Customers' },
-  ]
+  const { pathname } = useLocation()
 
   return (
-    <nav className="navbar">
-      <div className="nav-brand">Food Order Tracking</div>
+    <nav className="nav">
+      <Link className="nav-brand" to="/">
+        <span className="nav-brand-word">Food <em>Order</em></span>
+        <span className="nav-brand-dot" />
+        <span className="nav-brand-word">Tracking</span>
+      </Link>
+
+      <div className="nav-divider" />
+
       <div className="nav-links">
-        {links.map((link) => (
+        {LINKS.map(({ path, label }) => (
           <Link
-            key={link.path}
-            to={link.path}
-            className={location.pathname === link.path ? 'active' : ''}
+            key={path}
+            to={path}
+            className={`nav-link${pathname === path ? ' active' : ''}`}
           >
-            {link.label}
+            {label}
           </Link>
         ))}
       </div>
@@ -42,23 +50,21 @@ function Navbar() {
   )
 }
 
-function App() {
+export default function App() {
   return (
     <BrowserRouter>
       <Navbar />
-      <main className="main-content">
+      <main className="app-main">
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/schedule" element={<Schedule />} />
-          <Route path="/items" element={<Items />} />
-          <Route path="/orders" element={<Orders />} />
+          <Route path="/"                element={<Home />} />
+          <Route path="/dashboard"       element={<Dashboard />} />
+          <Route path="/schedule"        element={<Schedule />} />
+          <Route path="/items"           element={<Items />} />
+          <Route path="/orders"          element={<Orders />} />
           <Route path="/orders/:id/edit" element={<OrderEditWrapper />} />
-          <Route path="/customers" element={<Customers />} />
+          <Route path="/customers"       element={<Customers />} />
         </Routes>
       </main>
     </BrowserRouter>
   )
 }
-
-export default App
