@@ -165,6 +165,10 @@ export default function OrderEdit() {
 
   /* ── Save ── */
   const handleSave = async () => {
+    if (selectedItems.length === 0) {
+      setSaveError("Add at least one item to the order before saving.");
+      return;
+    }
     setSaving(true); setSaveError(null);
     try {
       await api.updateOrder(parseInt(id), {
