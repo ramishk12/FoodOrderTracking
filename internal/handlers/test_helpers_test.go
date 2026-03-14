@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,15 +18,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// setupTestDB creates a sqlmock database for use in tests.
-func setupTestDB() (*sql.DB, sqlmock.Sqlmock, error) {
-	return sqlmock.New()
-}
-
-// withMockDB sets database.DB to a fresh mock, calls f, then restores the original.
+// withMockDB sets database.DB to a fresh sqlmock, calls f, then restores the original.
 func withMockDB(t *testing.T, f func(m sqlmock.Sqlmock)) {
 	t.Helper()
-	db, mock, err := setupTestDB()
+	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("Failed to create mock DB: %v", err)
 	}
