@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -161,6 +163,7 @@ func GetScheduledOrders(c *gin.Context) {
 	}
 
 	now := time.Now().UTC()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	endDate := now.AddDate(0, 0, days)
 
 	rows, err := database.DB.Query(orderQuery+`
@@ -168,7 +171,7 @@ func GetScheduledOrders(c *gin.Context) {
 		  AND o.scheduled_date BETWEEN $1 AND $2
 		  AND o.status NOT IN ('delivered', 'cancelled')
 		ORDER BY o.scheduled_date ASC
-	`, now, endDate)
+	`, startOfDay, endDate)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -199,7 +202,7 @@ func GetScheduledOrders(c *gin.Context) {
 // GetOrdersByCustomer returns the 10 most recent orders for a customer.
 func GetOrdersByCustomer(c *gin.Context) {
 	customerID, err := strconv.Atoi(c.Param("customerId"))
-	if err != nil {
+	if err != nil || customerID <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid customer ID"})
 		return
 	}
@@ -239,15 +242,18 @@ func GetOrdersByCustomer(c *gin.Context) {
 // GetOrder returns a single order by ID.
 func GetOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
 		return
 	}
 
 	row := database.DB.QueryRow(orderQuery+` WHERE o.id = $1`, id)
 	o, err := scanOrder(row)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		return
+	} else if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -378,7 +384,7 @@ func CreateOrder(c *gin.Context) {
 // UpdateOrder updates an existing order's details and optionally its items.
 func UpdateOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
 		return
 	}
@@ -390,10 +396,8 @@ func UpdateOrder(c *gin.Context) {
 	}
 
 	if input.PaymentMethod == "" {
-		input.PaymentMethod = "cash"
-	}
-	if input.Status == "" {
-		input.Status = "pending"
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Payment method is required"})
+		return
 	}
 	if !validateOrderStatus(c, input.Status) {
 		return
@@ -413,7 +417,7 @@ func UpdateOrder(c *gin.Context) {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(`
+	result, err := tx.Exec(`
 		UPDATE orders
 		SET customer_id = $1, delivery_address = $2, status = $3, total_amount = $4,
 		    notes = $5, payment_method = $6, scheduled_date = $7, updated_at = CURRENT_TIMESTAMP
@@ -422,6 +426,10 @@ func UpdateOrder(c *gin.Context) {
 		input.Notes, input.PaymentMethod, normalizeScheduledDate(input.ScheduledDate), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
 
@@ -463,7 +471,7 @@ func UpdateOrder(c *gin.Context) {
 // DeleteOrder removes an order and all its items in a transaction.
 func DeleteOrder(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID"})
 		return
 	}
@@ -479,8 +487,13 @@ func DeleteOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if _, err = tx.Exec("DELETE FROM orders WHERE id = $1", id); err != nil {
+	delResult, err := tx.Exec("DELETE FROM orders WHERE id = $1", id)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if n, _ := delResult.RowsAffected(); n == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
 

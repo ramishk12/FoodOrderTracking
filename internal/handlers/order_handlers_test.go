@@ -380,18 +380,18 @@ func TestGetOrder(t *testing.T) {
 			},
 		},
 		{
-			name:    "Returns 404 on any database error",
+			name:    "Returns 500 on database error (non-ErrNoRows)",
 			orderID: "1",
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectQuery(orderQueryRegex).
 					WithArgs(1).
 					WillReturnError(fmt.Errorf("connection error"))
 			},
-			expectedStatus: http.StatusNotFound,
+			expectedStatus: http.StatusInternalServerError,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-				assert.Equal(t, "Order not found", resp["error"])
+				assert.NotEmpty(t, resp["error"])
 			},
 		},
 	}
@@ -630,7 +630,7 @@ func TestUpdateOrder(t *testing.T) {
 		{
 			name:           "Returns 400 for invalid status",
 			orderID:        "1",
-			body:           `{"status":"invalid_status"}`,
+			body:           `{"status":"invalid_status","payment_method":"cash"}`,
 			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -732,8 +732,8 @@ func TestDeleteOrder(t *testing.T) {
 			expectedStatus: http.StatusInternalServerError,
 		},
 		{
-			// Deleting a non-existent order is idempotent — still returns 200
-			name:    "Deletes non-existent order without error",
+			// Deleting a non-existent order now returns 404
+			name:    "Returns 404 when order does not exist",
 			orderID: "999",
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectBegin()
@@ -743,13 +743,12 @@ func TestDeleteOrder(t *testing.T) {
 				m.ExpectExec(`DELETE FROM orders WHERE id = \$1`).
 					WithArgs(999).
 					WillReturnResult(sqlmock.NewResult(0, 0))
-				m.ExpectCommit()
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-				assert.Equal(t, "Order deleted", resp["message"])
+				assert.Equal(t, "Order not found", resp["error"])
 			},
 		},
 	}
