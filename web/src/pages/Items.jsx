@@ -58,11 +58,12 @@ function ConfirmDialog({ title, body, onConfirm, onCancel }) {
 
 /* ─── ItemCard ───────────────────────────── */
 
-function ItemCard({ item, qty, onQtyChange, onEdit, onDelete, delay }) {
+function ItemCard({ item, qty, onQtyChange, onEdit, onDelete, onActivate, delay }) {
   const selected = qty > 0;
+  const unavailable = !item.available;
   return (
     <div
-      className={`itm-card${selected ? ' selected' : ''}`}
+      className={`itm-card${selected ? ' selected' : ''}${unavailable ? ' unavailable' : ''}`}
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="itm-card-body">
@@ -73,27 +74,37 @@ function ItemCard({ item, qty, onQtyChange, onEdit, onDelete, delay }) {
         {item.description && (
           <div className="itm-card-desc">{item.description}</div>
         )}
-        <div className="itm-qty-row">
-          <button className="itm-qty-btn"
-            onClick={() => onQtyChange(item.id, qty - 1)}>−</button>
-          <input
-            className="itm-qty-input"
-            type="number" min="0"
-            value={qty}
-            onChange={(e) => onQtyChange(item.id, e.target.value)}
-          />
-          <button className="itm-qty-btn"
-            onClick={() => onQtyChange(item.id, qty + 1)}>+</button>
-        </div>
+        {unavailable ? (
+          <div className="itm-unavailable-badge">Unavailable</div>
+        ) : (
+          <div className="itm-qty-row">
+            <button className="itm-qty-btn"
+              onClick={() => onQtyChange(item.id, qty - 1)}>−</button>
+            <input
+              className="itm-qty-input"
+              type="number" min="0"
+              value={qty}
+              onChange={(e) => onQtyChange(item.id, e.target.value)}
+            />
+            <button className="itm-qty-btn"
+              onClick={() => onQtyChange(item.id, qty + 1)}>+</button>
+          </div>
+        )}
       </div>
       <div className="itm-card-footer">
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
-          {selected ? `${fmtUsd(item.price * qty)} selected` : '\u00a0'}
+          {unavailable ? '\u00a0' : (selected ? `${fmtUsd(item.price * qty)} selected` : '\u00a0')}
         </span>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-ghost" style={{ padding: '5px 11px', fontSize: 11 }}
             onClick={() => onEdit(item)}>Edit</button>
-          <button className="btn-danger" onClick={() => onDelete(item)}>Delete</button>
+          {unavailable ? (
+            <button className="btn-primary" style={{ background: 'var(--green)' }} onClick={() => onActivate(item)}>
+              Activate
+            </button>
+          ) : (
+            <button className="btn-danger" onClick={() => onDelete(item)}>Delete</button>
+          )}
         </div>
       </div>
     </div>
@@ -128,9 +139,11 @@ export default function Items() {
   const [toast, setToast]               = useState(null);
 
   /* ── Derived ── */
-  const categories = [...new Set(items.map((i) => i.category).filter(Boolean))].sort();
+  const availableItems = items.filter((i) => i.available);
+  const unavailableItems = items.filter((i) => !i.available);
+  const categories = [...new Set(availableItems.map((i) => i.category).filter(Boolean))].sort();
 
-  const filteredItems = items.filter((item) => {
+  const filteredItems = availableItems.filter((item) => {
     const s = search.toLowerCase();
     const matchSearch = !search ||
       item.name?.toLowerCase().includes(s) ||
@@ -146,7 +159,7 @@ export default function Items() {
     return acc;
   }, {});
 
-  const selectedItems = items.filter((i) => (quantities[i.id] || 0) > 0);
+  const selectedItems = availableItems.filter((i) => (quantities[i.id] || 0) > 0);
   const totalAmount = selectedItems.reduce(
     (sum, i) => sum + i.price * (quantities[i.id] || 0), 0
   );
@@ -261,6 +274,17 @@ export default function Items() {
     }
   };
 
+  /* ── Activate ── */
+  const handleActivate = async (item) => {
+    try {
+      await api.activateItem(item.id);
+      showToast(`${item.name} is now available`);
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
   /* ── Order form ── */
   const openOrderForm = () => {
     setOrderFormOpen(true);
@@ -349,8 +373,9 @@ export default function Items() {
           <div>
             <h1 className="itm-title">The <em>Menu</em></h1>
             <div className="itm-meta">
-              {items.length} item{items.length !== 1 ? 's' : ''}
+              {availableItems.length} available item{availableItems.length !== 1 ? 's' : ''}
               {categories.length > 0 && ` · ${categories.length} categories`}
+              {unavailableItems.length > 0 && ` · ${unavailableItems.length} unavailable`}
             </div>
           </div>
           <div className="itm-header-actions">
@@ -569,7 +594,7 @@ export default function Items() {
             </div>
 
             {/* Empty states */}
-            {items.length === 0 && (
+            {availableItems.length === 0 && unavailableItems.length === 0 && (
               <div className="itm-empty">
                 <span style={{ fontSize: 32, opacity: 0.25 }}>✦</span>
                 <div className="itm-empty-title">Menu is empty</div>
@@ -577,7 +602,7 @@ export default function Items() {
               </div>
             )}
 
-            {items.length > 0 && filteredItems.length === 0 && (
+            {availableItems.length > 0 && filteredItems.length === 0 && (
               <div className="itm-empty">
                 <div className="itm-empty-title">No items found</div>
                 <div className="itm-empty-sub">Try a different search or category.</div>
@@ -606,12 +631,39 @@ export default function Items() {
                       onQtyChange={handleQty}
                       onEdit={openEdit}
                       onDelete={(i) => setDeleteTarget(i)}
+                      onActivate={handleActivate}
                       delay={gi * 60 + ii * 40}
                     />
                   ))}
                 </div>
               </div>
             ))}
+
+            {/* Unavailable items section */}
+            {unavailableItems.length > 0 && (
+              <div className="itm-unavailable-section">
+                <div className="itm-unavailable-head">
+                  <h2 className="itm-unavailable-title">Unavailable Items</h2>
+                  <span className="itm-unavailable-count">
+                    {unavailableItems.length} item{unavailableItems.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="itm-grid">
+                  {unavailableItems.map((item, ii) => (
+                    <ItemCard
+                      key={item.id}
+                      item={item}
+                      qty={0}
+                      onQtyChange={() => {}}
+                      onEdit={openEdit}
+                      onDelete={(i) => setDeleteTarget(i)}
+                      onActivate={handleActivate}
+                      delay={ii * 40}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Sticky order bar — visible when items selected */}
             {totalQty > 0 && (

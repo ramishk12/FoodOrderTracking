@@ -2639,6 +2639,40 @@ body {
   border-color: var(--amber);
   box-shadow: 0 0 0 3px rgba(196,124,43,0.12);
 }
+.itm-card.unavailable {
+  opacity: 0.7;
+  border-color: var(--muted);
+}
+.itm-card.unavailable:hover {
+  border-color: var(--brown);
+}
+.itm-unavailable-badge {
+  display: inline-flex; align-items: center;
+  padding: 6px 12px;
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: 12px; font-weight: 500;
+  border-radius: 6px; margin-top: 4px;
+  font-family: var(--font-mono);
+}
+
+.itm-unavailable-section {
+  margin-top: 48px; padding-top: 32px;
+  border-top: 2px dashed var(--rule);
+}
+.itm-unavailable-head {
+  display: flex; align-items: baseline; gap: 12px;
+  margin-bottom: 20px;
+}
+.itm-unavailable-title {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 500;
+  color: var(--espresso); font-style: italic;
+}
+.itm-unavailable-count {
+  font-family: var(--font-mono);
+  font-size: 13px; color: var(--muted);
+}
 
 .itm-card-body {
   padding: 16px 18px 12px; flex: 1;

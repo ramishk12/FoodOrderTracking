@@ -86,6 +86,7 @@ func main() {
 			items.POST("", handlers.CreateItem)
 			items.PUT("/:id", handlers.UpdateItem)
 			items.DELETE("/:id", handlers.DeactivateItem)
+			items.POST("/:id/activate", handlers.ActivateItem)
 		}
 
 		orders := api.Group("/orders")
