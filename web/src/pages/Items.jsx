@@ -137,6 +137,7 @@ export default function Items() {
   const [catFilter, setCatFilter]       = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [toast, setToast]               = useState(null);
+  const [showUnavailable, setShowUnavailable] = useState(false);
 
   /* ── Derived ── */
   const availableItems = items.filter((i) => i.available);
@@ -642,26 +643,32 @@ export default function Items() {
             {/* Unavailable items section */}
             {unavailableItems.length > 0 && (
               <div className="itm-unavailable-section">
-                <div className="itm-unavailable-head">
-                  <h2 className="itm-unavailable-title">Unavailable Items</h2>
+                <button
+                  className="itm-unavailable-toggle"
+                  onClick={() => setShowUnavailable(!showUnavailable)}
+                >
+                  <span className="itm-unavailable-toggle-icon">{showUnavailable ? '▼' : '▶'}</span>
+                  <span className="itm-unavailable-title">Unavailable Items</span>
                   <span className="itm-unavailable-count">
                     {unavailableItems.length} item{unavailableItems.length !== 1 ? 's' : ''}
                   </span>
-                </div>
-                <div className="itm-grid">
-                  {unavailableItems.map((item, ii) => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      qty={0}
-                      onQtyChange={() => {}}
-                      onEdit={openEdit}
-                      onDelete={(i) => setDeleteTarget(i)}
-                      onActivate={handleActivate}
-                      delay={ii * 40}
-                    />
-                  ))}
-                </div>
+                </button>
+                {showUnavailable && (
+                  <div className="itm-grid">
+                    {unavailableItems.map((item, ii) => (
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        qty={0}
+                        onQtyChange={() => {}}
+                        onEdit={openEdit}
+                        onDelete={(i) => setDeleteTarget(i)}
+                        onActivate={handleActivate}
+                        delay={ii * 40}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
