@@ -161,7 +161,10 @@ func TestGetScheduledOrders(t *testing.T) {
 			name:  "Returns scheduled orders within window",
 			query: "/api/orders/scheduled?days=7",
 			setupMock: func(m sqlmock.Sqlmock) {
+				// AnyArg for both date bounds — handler computes time.Now() at request
+				// time so asserting exact values would cause a time-drift race.
 				m.ExpectQuery(orderQueryRegex).
+					WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 					WillReturnRows(sqlmock.NewRows(orderCols).
 						AddRow(1, 1, "123 Main St", "pending", 25.99, "", "cash", time.Now().AddDate(0, 0, 2), time.Now(), time.Now(), "John Doe", "555-1234"))
 				m.ExpectQuery(populateItemsQueryRegex).
@@ -178,10 +181,34 @@ func TestGetScheduledOrders(t *testing.T) {
 			},
 		},
 		{
+			// Lower bound is startOfDay so orders scheduled earlier today are included.
+			name:  "Includes orders scheduled earlier today",
+			query: "/api/orders/scheduled?days=7",
+			setupMock: func(m sqlmock.Sqlmock) {
+				now := time.Now().UTC()
+				earlyToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 30, 0, 0, time.UTC)
+				m.ExpectQuery(orderQueryRegex).
+					WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
+					WillReturnRows(sqlmock.NewRows(orderCols).
+						AddRow(2, 1, "123 Main St", "pending", 15.00, "", "cash", earlyToday, time.Now(), time.Now(), "John Doe", "555-1234"))
+				m.ExpectQuery(populateItemsQueryRegex).
+					WithArgs(2).
+					WillReturnRows(sqlmock.NewRows(itemCols))
+			},
+			expectedStatus: http.StatusOK,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var orders []models.Order
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &orders))
+				assert.Len(t, orders, 1)
+				assert.Equal(t, 2, orders[0].ID)
+			},
+		},
+		{
 			name:  "Returns empty when no scheduled orders",
 			query: "/api/orders/scheduled?days=7",
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectQuery(orderQueryRegex).
+					WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 					WillReturnRows(sqlmock.NewRows(orderCols))
 				// No populateOrderItems call when slice is empty
 			},
@@ -197,6 +224,7 @@ func TestGetScheduledOrders(t *testing.T) {
 			query: "/api/orders/scheduled?days=abc",
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectQuery(orderQueryRegex).
+					WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 					WillReturnRows(sqlmock.NewRows(orderCols))
 			},
 			expectedStatus: http.StatusOK,
@@ -206,6 +234,7 @@ func TestGetScheduledOrders(t *testing.T) {
 			query: "/api/orders/scheduled",
 			setupMock: func(m sqlmock.Sqlmock) {
 				m.ExpectQuery(orderQueryRegex).
+					WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 					WillReturnError(fmt.Errorf("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
@@ -263,6 +292,28 @@ func TestGetOrdersByCustomer(t *testing.T) {
 		{
 			name:           "Returns 400 for invalid customer ID",
 			customerID:     "abc",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid customer ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for zero customer ID",
+			customerID:     "0",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid customer ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for negative customer ID",
+			customerID:     "-1",
 			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -356,6 +407,28 @@ func TestGetOrder(t *testing.T) {
 		{
 			name:           "Returns 400 for invalid order ID",
 			orderID:        "abc",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid order ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for zero order ID",
+			orderID:        "0",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid order ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for negative order ID",
+			orderID:        "-1",
 			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -611,13 +684,69 @@ func TestUpdateOrder(t *testing.T) {
 		{
 			name:           "Returns 400 for invalid order ID",
 			orderID:        "abc",
-			body:           `{"status":"preparing"}`,
+			body:           `{"status":"preparing","payment_method":"cash"}`,
 			setupMock:      func(m sqlmock.Sqlmock) {},
 			expectedStatus: http.StatusBadRequest,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "Invalid order ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for zero order ID",
+			orderID:        "0",
+			body:           `{"status":"preparing","payment_method":"cash"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid order ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for negative order ID",
+			orderID:        "-1",
+			body:           `{"status":"preparing","payment_method":"cash"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid order ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 when payment method is missing",
+			orderID:        "1",
+			body:           `{"status":"preparing","delivery_address":"123 Main St"}`,
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Payment method is required", resp["error"])
+			},
+		},
+		{
+			name:    "Returns 404 when order does not exist",
+			orderID: "999",
+			body:    `{"customer_id":1,"delivery_address":"123 Main St","status":"preparing","total_amount":30.00,"payment_method":"cash"}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM customers WHERE id = \$1\)`).
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+				m.ExpectBegin()
+				m.ExpectExec(`UPDATE orders SET`).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+				m.ExpectRollback()
+			},
+			expectedStatus: http.StatusNotFound,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Order not found", resp["error"])
 			},
 		},
 		{
@@ -705,6 +834,28 @@ func TestDeleteOrder(t *testing.T) {
 			},
 		},
 		{
+			name:           "Returns 400 for zero order ID",
+			orderID:        "0",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid order ID", resp["error"])
+			},
+		},
+		{
+			name:           "Returns 400 for negative order ID",
+			orderID:        "-5",
+			setupMock:      func(m sqlmock.Sqlmock) {},
+			expectedStatus: http.StatusBadRequest,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]string
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, "Invalid order ID", resp["error"])
+			},
+		},
+		{
 			name:    "Returns 500 when deleting order items fails",
 			orderID: "1",
 			setupMock: func(m sqlmock.Sqlmock) {
@@ -732,7 +883,6 @@ func TestDeleteOrder(t *testing.T) {
 			expectedStatus: http.StatusInternalServerError,
 		},
 		{
-			// Deleting a non-existent order now returns 404
 			name:    "Returns 404 when order does not exist",
 			orderID: "999",
 			setupMock: func(m sqlmock.Sqlmock) {
@@ -743,6 +893,8 @@ func TestDeleteOrder(t *testing.T) {
 				m.ExpectExec(`DELETE FROM orders WHERE id = \$1`).
 					WithArgs(999).
 					WillReturnResult(sqlmock.NewResult(0, 0))
+				// Handler returns 404 then defer tx.Rollback() fires
+				m.ExpectRollback()
 			},
 			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
