@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"food-order-tracking/internal/database"
 	"food-order-tracking/internal/models"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -131,27 +130,21 @@ func TestGetOrders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			assert.NoError(t, err)
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, "/api/orders", nil)
 
-			tt.setupMock(mock)
+				GetOrders(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, "/api/orders", nil)
-
-			GetOrders(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
@@ -221,27 +214,21 @@ func TestGetScheduledOrders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			assert.NoError(t, err)
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, tt.query, nil)
 
-			tt.setupMock(mock)
+				GetScheduledOrders(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, tt.query, nil)
-
-			GetScheduledOrders(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
@@ -314,28 +301,22 @@ func TestGetOrdersByCustomer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			assert.NoError(t, err)
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "customerId", Value: tt.customerID}}
+				c.Request = httptest.NewRequest(http.MethodGet, "/api/orders/customer/"+tt.customerID, nil)
 
-			tt.setupMock(mock)
+				GetOrdersByCustomer(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "customerId", Value: tt.customerID}}
-			c.Request = httptest.NewRequest(http.MethodGet, "/api/orders/customer/"+tt.customerID, nil)
-
-			GetOrdersByCustomer(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
@@ -417,28 +398,22 @@ func TestGetOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			assert.NoError(t, err)
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: tt.orderID}}
+				c.Request = httptest.NewRequest(http.MethodGet, "/api/orders/"+tt.orderID, nil)
 
-			tt.setupMock(mock)
+				GetOrder(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "id", Value: tt.orderID}}
-			c.Request = httptest.NewRequest(http.MethodGet, "/api/orders/"+tt.orderID, nil)
-
-			GetOrder(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
@@ -554,29 +529,23 @@ func TestCreateOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			assert.NoError(t, err)
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				req := httptest.NewRequest(http.MethodPost, "/api/orders", strings.NewReader(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+				c.Request = req
 
-			tt.setupMock(mock)
+				CreateOrder(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			req := httptest.NewRequest(http.MethodPost, "/api/orders", strings.NewReader(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-			c.Request = req
-
-			CreateOrder(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
@@ -674,30 +643,24 @@ func TestUpdateOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			assert.NoError(t, err)
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: tt.orderID}}
+				req := httptest.NewRequest(http.MethodPut, "/api/orders/"+tt.orderID, strings.NewReader(tt.body))
+				req.Header.Set("Content-Type", "application/json")
+				c.Request = req
 
-			tt.setupMock(mock)
+				UpdateOrder(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "id", Value: tt.orderID}}
-			req := httptest.NewRequest(http.MethodPut, "/api/orders/"+tt.orderID, strings.NewReader(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-			c.Request = req
-
-			UpdateOrder(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
@@ -793,28 +756,22 @@ func TestDeleteOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := setupTestDB()
-			assert.NoError(t, err)
-			defer db.Close()
+			withMockDB(t, func(mock sqlmock.Sqlmock) {
+				tt.setupMock(mock)
 
-			originalDB := database.DB
-			database.DB = db
-			defer func() { database.DB = originalDB }()
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: tt.orderID}}
+				c.Request = httptest.NewRequest(http.MethodDelete, "/api/orders/"+tt.orderID, nil)
 
-			tt.setupMock(mock)
+				DeleteOrder(c)
 
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Params = gin.Params{{Key: "id", Value: tt.orderID}}
-			c.Request = httptest.NewRequest(http.MethodDelete, "/api/orders/"+tt.orderID, nil)
-
-			DeleteOrder(c)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			if tt.checkResponse != nil {
-				tt.checkResponse(t, w)
-			}
-			assert.NoError(t, mock.ExpectationsWereMet())
+				assert.Equal(t, tt.expectedStatus, w.Code)
+				if tt.checkResponse != nil {
+					tt.checkResponse(t, w)
+				}
+				assert.NoError(t, mock.ExpectationsWereMet())
+			})
 		})
 	}
 }
