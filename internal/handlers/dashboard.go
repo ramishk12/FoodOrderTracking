@@ -29,6 +29,7 @@ type DashboardStats struct {
 	BestSellingItems  []BestSellingItem `json:"best_selling_items"`
 	TopCustomers      []TopCustomer     `json:"top_customers"`
 	SalesTrend        []SalesDataPoint  `json:"sales_trend"`
+	Warnings          []string          `json:"warnings,omitempty"`
 }
 
 // BestSellingItem holds aggregated sales data for a single menu item.
@@ -140,7 +141,7 @@ func fetchBestSellingItems(stats *DashboardStats) error {
 // fetchTopCustomers populates the TopCustomers slice.
 func fetchTopCustomers(stats *DashboardStats) error {
 	rows, err := database.DB.Query(`
-		SELECT COALESCE(c.name, 'Unknown'), COUNT(*), SUM(o.total_amount)
+		SELECT COALESCE(c.name, 'Unknown'), COUNT(*), COALESCE(SUM(o.total_amount), 0)
 		FROM orders o
 		LEFT JOIN customers c ON o.customer_id = c.id
 		WHERE o.status != 'cancelled'
@@ -166,7 +167,7 @@ func fetchTopCustomers(stats *DashboardStats) error {
 
 // fetchSalesTrend populates the SalesTrend slice for the past salesTrendDays days
 // using a single GROUP BY query instead of one query per day.
-func fetchSalesTrend(stats *DashboardStats, since time.Time) error {
+func fetchSalesTrend(stats *DashboardStats, since, now time.Time) error {
 	rows, err := database.DB.Query(`
 		SELECT DATE(created_at AT TIME ZONE 'UTC')::text AS day,
 		       COUNT(*) AS orders,
@@ -201,7 +202,6 @@ func fetchSalesTrend(stats *DashboardStats, since time.Time) error {
 	}
 
 	// Build a contiguous day-by-day slice, filling zeros for days with no orders.
-	now := time.Now().UTC()
 	for i := salesTrendDays - 1; i >= 0; i-- {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		d := byDate[date] // zero value if date absent
@@ -234,15 +234,19 @@ func GetDashboardStats(c *gin.Context) {
 	}
 	if err := fetchOrdersByStatus(&stats); err != nil {
 		log.Printf("Error fetching orders by status: %v", err)
+		stats.Warnings = append(stats.Warnings, "orders by status unavailable")
 	}
 	if err := fetchBestSellingItems(&stats); err != nil {
 		log.Printf("Error fetching best selling items: %v", err)
+		stats.Warnings = append(stats.Warnings, "best selling items unavailable")
 	}
 	if err := fetchTopCustomers(&stats); err != nil {
 		log.Printf("Error fetching top customers: %v", err)
+		stats.Warnings = append(stats.Warnings, "top customers unavailable")
 	}
-	if err := fetchSalesTrend(&stats, salesTrendSince); err != nil {
+	if err := fetchSalesTrend(&stats, salesTrendSince, now); err != nil {
 		log.Printf("Error fetching sales trend: %v", err)
+		stats.Warnings = append(stats.Warnings, "sales trend unavailable")
 	}
 
 	c.JSON(http.StatusOK, stats)
