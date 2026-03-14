@@ -43,9 +43,9 @@ func validateItem(c *gin.Context, input models.Item) bool {
 	return true
 }
 
-// GetItems returns all available items ordered by category and name.
+// GetItems returns all items ordered by category and name.
 func GetItems(c *gin.Context) {
-	rows, err := database.DB.Query(itemQuery + ` WHERE available = true ORDER BY category, name`)
+	rows, err := database.DB.Query(itemQuery + ` ORDER BY category, name`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -160,4 +160,23 @@ func DeactivateItem(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Item deactivated"})
+}
+
+// ActivateItem marks an item as available.
+func ActivateItem(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid item ID"})
+		return
+	}
+
+	_, err = database.DB.Exec(
+		`UPDATE items SET available = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, id,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Item activated"})
 }
