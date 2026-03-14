@@ -238,6 +238,9 @@ func TestCreateItem(t *testing.T) {
 				m.ExpectQuery(`INSERT INTO items`).
 					WithArgs("Pizza", "Delicious pizza", 12.99, "Main", true).
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+				m.ExpectQuery(itemQueryRegex).
+					WillReturnRows(sqlmock.NewRows(itemQueryCols).
+						AddRow(1, "Pizza", "Delicious pizza", 12.99, "Main", true, time.Now(), time.Now()))
 			},
 			expectedStatus: http.StatusCreated,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -310,6 +313,9 @@ func TestCreateItem(t *testing.T) {
 				m.ExpectQuery(`INSERT INTO items`).
 					WithArgs("Burger", "Tasty burger", 8.99, "Main", false).
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(2))
+				m.ExpectQuery(itemQueryRegex).
+					WillReturnRows(sqlmock.NewRows(itemQueryCols).
+						AddRow(2, "Burger", "Tasty burger", 8.99, "Main", false, time.Now(), time.Now()))
 			},
 			expectedStatus: http.StatusCreated,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -553,7 +559,7 @@ func TestDeactivateItem(t *testing.T) {
 			expectedStatus: http.StatusInternalServerError,
 		},
 		{
-			// Deactivating a non-existent item is idempotent — still returns 200
+			// Deactivating a non-existent item now returns 404
 			name:   "Deactivates non-existent item without error",
 			itemID: "999",
 			setupMock: func(m sqlmock.Sqlmock) {
@@ -561,11 +567,11 @@ func TestDeactivateItem(t *testing.T) {
 					WithArgs(999).
 					WillReturnResult(sqlmock.NewResult(0, 0))
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusNotFound,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var resp map[string]string
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-				assert.Equal(t, "Item deactivated", resp["message"])
+				assert.Equal(t, "Item not found", resp["error"])
 			},
 		},
 	}
