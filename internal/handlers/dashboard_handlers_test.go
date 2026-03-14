@@ -20,7 +20,7 @@ const (
 	statusCountQueryRegex   = `SELECT status, COUNT\(\*\) FROM orders`
 	bestSellingQueryRegex   = `SELECT i\.name, SUM\(oi\.quantity\)`
 	topCustomersQueryRegex  = `SELECT COALESCE\(c\.name, 'Unknown'\)`
-	salesTrendQueryRegex    = `DATE\(created_at AT TIME ZONE 'UTC'\)::text`
+	salesTrendQueryRegex    = `SELECT DATE\(created_at AT TIME ZONE 'UTC'\)`
 )
 
 // ── Shared column slices ─────────────────────────────────────────────────────
@@ -38,17 +38,16 @@ var (
 // mockRevenueSummary sets up the three revenue/count queries (total, monthly, daily).
 // Pass UTC-based time values to match the refactored dashboard.go.
 func mockRevenueSummary(m sqlmock.Sqlmock, total, monthly, daily float64, totalOrders, monthlyOrders, dailyOrders int) {
-	now := time.Now().UTC()
-	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-
+	// Use AnyArg for the time boundaries — the handler computes its own time.Now()
+	// when the request fires, so asserting exact values here causes a time-drift race
+	// where setup time != request time, especially around midnight.
 	m.ExpectQuery(totalRevenueQueryRegex).
 		WillReturnRows(sqlmock.NewRows(revenueCountCols).AddRow(total, totalOrders))
 	m.ExpectQuery(periodRevenueQueryRegex).
-		WithArgs(startOfMonth).
+		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(revenueCountCols).AddRow(monthly, monthlyOrders))
 	m.ExpectQuery(periodRevenueQueryRegex).
-		WithArgs(startOfDay).
+		WithArgs(sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(revenueCountCols).AddRow(daily, dailyOrders))
 }
 
@@ -69,8 +68,9 @@ func mockTopCustomers(m sqlmock.Sqlmock, rows *sqlmock.Rows) {
 
 // mockSalesTrend sets up the single GROUP BY sales trend query.
 // The refactored code fires one query (not 30), returning aggregated rows.
+// AnyArg is used for the since timestamp to avoid time-drift races.
 func mockSalesTrend(m sqlmock.Sqlmock, rows *sqlmock.Rows) {
-	m.ExpectQuery(salesTrendQueryRegex).WillReturnRows(rows)
+	m.ExpectQuery(salesTrendQueryRegex).WithArgs(sqlmock.AnyArg()).WillReturnRows(rows)
 }
 
 // mockEmptySalesTrend sets up the sales trend query returning no rows.
@@ -96,10 +96,13 @@ func mockFullDashboard(m sqlmock.Sqlmock) {
 		AddRow("John Doe", 5, 500.00).
 		AddRow("Jane Smith", 3, 300.00))
 
-	now := time.Now().UTC()
+	// Build trend rows using the same now reference to avoid a time-drift race.
+	// The mock returns one row per day; the handler zero-fills any missing days.
+	// We use AnyArg on the query arg (the since timestamp) for the same reason.
+	trendNow := time.Now().UTC()
 	trendRows := sqlmock.NewRows(salesTrendCols)
 	for i := salesTrendDays - 1; i >= 0; i-- {
-		date := now.AddDate(0, 0, -i).Format("2006-01-02")
+		date := trendNow.AddDate(0, 0, -i).Format("2006-01-02")
 		trendRows.AddRow(date, 1, 50.00)
 	}
 	mockSalesTrend(m, trendRows)
@@ -127,7 +130,7 @@ func TestGetDashboardStats(t *testing.T) {
 				assert.Equal(t, 5, stats.MonthlyOrders)
 				assert.Equal(t, 100.00, stats.DailyRevenue)
 				assert.Equal(t, 2, stats.DailyOrders)
-				assert.Equal(t, 150.00, stats.AverageOrderValue)
+				assert.Equal(t, 1500.00/10, stats.AverageOrderValue) // TotalRevenue / TotalOrders
 				assert.Len(t, stats.OrdersByStatus, 4)
 				assert.Len(t, stats.BestSellingItems, 2)
 				assert.Len(t, stats.TopCustomers, 2)
@@ -174,7 +177,7 @@ func TestGetDashboardStats(t *testing.T) {
 				m.ExpectQuery(statusCountQueryRegex).WillReturnError(fmt.Errorf("db error"))
 				m.ExpectQuery(bestSellingQueryRegex).WillReturnError(fmt.Errorf("db error"))
 				m.ExpectQuery(topCustomersQueryRegex).WillReturnError(fmt.Errorf("db error"))
-				m.ExpectQuery(salesTrendQueryRegex).WillReturnError(fmt.Errorf("db error"))
+				m.ExpectQuery(salesTrendQueryRegex).WithArgs(sqlmock.AnyArg()).WillReturnError(fmt.Errorf("db error"))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -188,6 +191,8 @@ func TestGetDashboardStats(t *testing.T) {
 				assert.Empty(t, stats.BestSellingItems)
 				assert.Empty(t, stats.TopCustomers)
 				assert.Empty(t, stats.SalesTrend)
+				// Each failed supplementary query should produce a warning entry
+				assert.Len(t, stats.Warnings, 4)
 			},
 		},
 		{
@@ -310,9 +315,13 @@ func TestDashboardSalesTrend(t *testing.T) {
 			assert.Equal(t, 3, secondLast.Orders)
 
 			// A day with no orders should be zero-filled, not absent.
-			first := stats.SalesTrend[0]
-			assert.Equal(t, 0, first.Orders)
-			assert.Equal(t, 0.00, first.Revenue)
+			// The mock provides data for only the last 2 days (indices salesTrendDays-1 and
+			// salesTrendDays-2). Any earlier index is guaranteed to be empty regardless of
+			// salesTrendDays, so we use salesTrendDays-3 rather than 0 to stay robust if
+			// salesTrendDays is ever reduced to a small value.
+			emptyDay := stats.SalesTrend[salesTrendDays-3]
+			assert.Equal(t, 0, emptyDay.Orders)
+			assert.Equal(t, 0.00, emptyDay.Revenue)
 
 			assert.NoError(t, m.ExpectationsWereMet())
 		})
