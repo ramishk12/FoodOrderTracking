@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
-import '../index.css';
 
 /* ─── Helpers ────────────────────────────── */
 
@@ -52,7 +51,11 @@ export default function OrderEdit() {
     customer_id: '', delivery_address: '',
     notes: '', payment_method: 'cash', scheduled_date: '',
   });
-  const [orderItems, setOrderItems] = useState({});
+  // lineItems: array so same item can appear multiple times with different modifiers
+  // Each entry: { lineId, itemId, quantity, modifiers[] }
+  const [lineItems, setLineItems] = useState([]);
+  const [modifiers, setModifiers] = useState([]);       // available modifiers from API
+  const [openModPicker, setOpenModPicker] = useState(null); // lineId with open picker
 
   const [showNewCust, setShowNewCust] = useState(false);
   const [custForm, setCustForm]       = useState(EMPTY_CUST);
@@ -66,12 +69,13 @@ export default function OrderEdit() {
   const load = useCallback(async () => {
     try {
       setLoading(true); setError(null);
-      const [orderData, customersData, itemsData] = await Promise.all([
-        api.getOrder(id), api.getCustomers(), api.getItems(),
+      const [orderData, customersData, itemsData, modifiersData] = await Promise.all([
+        api.getOrder(id), api.getCustomers(), api.getItems(), api.getModifiers(),
       ]);
       setOrder(orderData);
       setCustomers(customersData || []);
       setItems(itemsData || []);
+      setModifiers(modifiersData || []);
 
       setFormData({
         customer_id:      orderData.customer_id ? String(orderData.customer_id) : '',
@@ -81,9 +85,18 @@ export default function OrderEdit() {
         scheduled_date:   utcToLocalInput(orderData.scheduled_date),
       });
 
-      const qty = {};
-      (orderData.order_items || []).forEach((oi) => { qty[oi.item_id] = oi.quantity; });
-      setOrderItems(qty);
+      // Hydrate line items from existing order, preserving saved modifiers
+      const lines = (orderData.order_items || []).map((oi) => ({
+        lineId: `line-${oi.id}`,
+        itemId: oi.item_id,
+        quantity: oi.quantity,
+        modifiers: (oi.modifiers || []).map((m) => ({
+          modifier_id: m.modifier_id,
+          name: m.modifier_name,
+          price_adjustment: m.price_adjustment,
+        })),
+      }));
+      setLineItems(lines);
 
       if (orderData.customer_id) {
         fetchHistory(orderData.customer_id, parseInt(id));
@@ -111,21 +124,48 @@ export default function OrderEdit() {
     } catch { setOrderHistory([]); }
   };
 
-  /* ── Quantity ── */
-  const setQty = (itemId, raw) => {
+  /* ── Line item helpers ── */
+  const addLine = (item) => {
+    setLineItems((p) => [...p, {
+      lineId: `line-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      itemId: item.id,
+      quantity: 1,
+      modifiers: [],
+    }]);
+  };
+
+  const setLineQty = (lineId, raw) => {
     const qty = Math.max(0, parseInt(raw) || 0);
-    setOrderItems((p) => ({ ...p, [itemId]: qty }));
+    setLineItems((p) => p.map((l) => l.lineId === lineId ? { ...l, quantity: qty } : l));
+  };
+
+  const removeLine = (lineId) => {
+    setLineItems((p) => p.filter((l) => l.lineId !== lineId));
+    if (openModPicker === lineId) setOpenModPicker(null);
+  };
+
+  const toggleModifier = (lineId, mod) => {
+    setLineItems((p) => p.map((l) => {
+      if (l.lineId !== lineId) return l;
+      const has = l.modifiers.some((m) => m.modifier_id === mod.id);
+      return {
+        ...l,
+        modifiers: has
+          ? l.modifiers.filter((m) => m.modifier_id !== mod.id)
+          : [...l.modifiers, { modifier_id: mod.id, name: mod.name, price_adjustment: mod.price_adjustment }],
+      };
+    }));
   };
 
   /* ── Derived ── */
-  const selectedItems = Object.entries(orderItems)
-    .filter(([, q]) => q > 0)
-    .map(([itemId, quantity]) => {
-      const item = items.find((i) => i.id === parseInt(itemId));
-      return { item_id: parseInt(itemId), quantity, price: item?.price || 0, name: item?.name || 'Unknown' };
-    });
-
-  const total = selectedItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  // Total including per-line modifier adjustments
+  const total = lineItems.reduce((sum, line) => {
+    if (line.quantity <= 0) return sum;
+    const item = items.find((i) => i.id === line.itemId);
+    if (!item) return sum;
+    const modAdj = line.modifiers.reduce((ms, m) => ms + (m.price_adjustment || 0), 0);
+    return sum + (item.price + modAdj) * line.quantity;
+  }, 0);
 
   const groupedItems = items.reduce((acc, item) => {
     const cat = item.category || 'Uncategorised';
@@ -155,9 +195,7 @@ export default function OrderEdit() {
       setCustomers(updated || []);
       setShowNewCust(false);
       setCustForm(EMPTY_CUST);
-      if (newCust?.id) {
-        handleCustomerChange(String(newCust.id));
-      }
+      if (newCust?.id != null) handleCustomerChange(String(newCust.id));
     } catch (err) {
       setCustError(err.message);
     } finally {
@@ -167,8 +205,9 @@ export default function OrderEdit() {
 
   /* ── Save ── */
   const handleSave = async () => {
-    if (selectedItems.length === 0) {
-      setSaveError("Add at least one item to the order before saving.");
+    const activeLines = lineItems.filter((l) => l.quantity > 0);
+    if (activeLines.length === 0) {
+      setSaveError('Add at least one item to the order before saving.');
       return;
     }
     setSaving(true); setSaveError(null);
@@ -181,7 +220,15 @@ export default function OrderEdit() {
         payment_method:   formData.payment_method,
         total_amount:     total,
         scheduled_date:   localInputToUtcIso(formData.scheduled_date),
-        items:            selectedItems,
+        items: activeLines.map((l) => ({
+          item_id:   l.itemId,
+          quantity:  l.quantity,
+          modifiers: l.modifiers.map((m) => ({
+            modifier_id:      m.modifier_id,
+            name:             m.name,
+            price_adjustment: m.price_adjustment,
+          })),
+        })),
       });
       showToast('Order saved');
       setTimeout(() => navigate('/orders'), 900);
@@ -206,30 +253,25 @@ export default function OrderEdit() {
 
   /* ── Render ── */
   if (loading) return (
-    <>
-      <div className="oe-root">
-        <div className="oe-load">
-          <div className="oe-spinner" />
-          <span className="oe-load-text">Loading order…</span>
-        </div>
+    <div className="oe-root">
+      <div className="oe-load">
+        <div className="oe-spinner" />
+        <span className="oe-load-text">Loading order…</span>
       </div>
-    </>
+    </div>
   );
 
   if (error) return (
-    <>
-      <div className="oe-root">
-        <div className="oe-error-page">
-          <p className="oe-error-msg">{error}</p>
-          <button className="oe-retry" onClick={load}>Try again</button>
-        </div>
+    <div className="oe-root">
+      <div className="oe-error-page">
+        <p className="oe-error-msg">{error}</p>
+        <button className="oe-retry" onClick={load}>Try again</button>
       </div>
-    </>
+    </div>
   );
 
   return (
-    <>
-      <div className="oe-root">
+    <div className="oe-root">
 
         {toast && <div className={`oe-toast ${toast.type}`}>{toast.msg}</div>}
 
@@ -328,13 +370,11 @@ export default function OrderEdit() {
                           <span className="oe-hist-date">{fmtDate(o.created_at)}</span>
                         </div>
                         <div className="oe-hist-items">
-                          {o.order_items?.length > 0 ? (
-                            <div>
-                              {o.order_items.map((i) => (
-                                <div key={i.item_id}>{i.quantity}× {i.item_name}</div>
-                              ))}
-                            </div>
-                          ) : 'No items'}
+                          {o.order_items?.length
+                            ? o.order_items.map((i) => (
+                                <div key={i.item_id ?? i.item_name}>{i.quantity}× {i.item_name}</div>
+                              ))
+                            : <div>No items</div>}
                         </div>
                         <div className="oe-hist-footer">
                           <span className="oe-hist-total">{fmtUsd(o.total_amount)}</span>
@@ -382,26 +422,76 @@ export default function OrderEdit() {
                 <div className="oe-section-title">Items <em>in order</em></div>
               </div>
               <div className="oe-section-body">
-                {selectedItems.length === 0 ? (
+                {lineItems.length === 0 ? (
                   <p className="oe-no-items">No items selected — add from the menu below.</p>
                 ) : (
                   <div className="oe-items-list">
-                    {selectedItems.map((sel) => (
-                      <div key={sel.item_id} className="oe-item-row">
-                        <span className="oe-item-name">{sel.name}</span>
-                        <span className="oe-item-price">{fmtUsd(sel.price)}</span>
-                        <div className="oe-qty">
-                          <button type="button" className="oe-qty-btn"
-                            onClick={() => setQty(sel.item_id, sel.quantity - 1)}>−</button>
-                          <input type="number" min="0" className="oe-qty-input"
-                            value={sel.quantity}
-                            onChange={(e) => setQty(sel.item_id, e.target.value)} />
-                          <button type="button" className="oe-qty-btn"
-                            onClick={() => setQty(sel.item_id, sel.quantity + 1)}>+</button>
+                    {lineItems.map((line) => {
+                      const item = items.find((i) => i.id === line.itemId);
+                      if (!item) return null;
+                      const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+                      const lineTotal = (item.price + modAdj) * line.quantity;
+                      const isPickerOpen = openModPicker === line.lineId;
+                      return (
+                        <div key={line.lineId} className="oe-item-row">
+                          <div className="oe-item-row-main">
+                            <span className="oe-item-name">{item.name}</span>
+                            <span className="oe-item-price">{fmtUsd(item.price)}</span>
+                            <div className="oe-qty">
+                              <button type="button" className="oe-qty-btn"
+                                onClick={() => setLineQty(line.lineId, line.quantity - 1)}>−</button>
+                              <input type="number" min="0" className="oe-qty-input"
+                                value={line.quantity}
+                                onChange={(e) => setLineQty(line.lineId, e.target.value)} />
+                              <button type="button" className="oe-qty-btn"
+                                onClick={() => setLineQty(line.lineId, line.quantity + 1)}>+</button>
+                            </div>
+                            <span className="oe-item-sub">{fmtUsd(lineTotal)}</span>
+                            <button type="button" className="oe-mod-toggle"
+                              onClick={() => setOpenModPicker(isPickerOpen ? null : line.lineId)}>
+                              {isPickerOpen ? 'Hide mods' : `Mods${line.modifiers.length > 0 ? ` (${line.modifiers.length})` : ''}`}
+                            </button>
+                            <button type="button" className="oe-remove-line"
+                              onClick={() => removeLine(line.lineId)} title="Remove line">✕</button>
+                          </div>
+                          {/* Applied modifiers */}
+                          {line.modifiers.length > 0 && (
+                            <div className="oe-mods-applied">
+                              {line.modifiers.map((m) => (
+                                <span key={m.modifier_id} className="oe-mod-pill">
+                                  {m.name}
+                                  {m.price_adjustment !== 0 && (
+                                    <span className="oe-mod-adj">
+                                      {m.price_adjustment > 0 ? '+' : ''}{fmtUsd(m.price_adjustment)}
+                                    </span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {/* Modifier picker */}
+                          {isPickerOpen && modifiers.length > 0 && (
+                            <div className="oe-mod-picker">
+                              {modifiers.map((mod) => {
+                                const active = line.modifiers.some((m) => m.modifier_id === mod.id);
+                                return (
+                                  <button key={mod.id} type="button"
+                                    className={`oe-mod-option${active ? ' active' : ''}`}
+                                    onClick={() => toggleModifier(line.lineId, mod)}>
+                                    {mod.name}
+                                    {mod.price_adjustment !== 0 && (
+                                      <span className="oe-mod-opt-adj">
+                                        {mod.price_adjustment > 0 ? '+' : ''}{fmtUsd(mod.price_adjustment)}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                        <span className="oe-item-sub">{fmtUsd(sel.price * sel.quantity)}</span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -421,22 +511,20 @@ export default function OrderEdit() {
                     </div>
                     <div className="oe-menu-grid">
                       {catItems.map((item) => {
-                        const qty = orderItems[item.id] || 0;
+                        const timesAdded = lineItems.filter((l) => l.itemId === item.id).length;
                         return (
-                          <div key={item.id} className={`oe-menu-card${qty > 0 ? ' selected' : ''}`}>
+                          <div key={item.id} className={`oe-menu-card${timesAdded > 0 ? ' selected' : ''}`}>
                             <div className="oe-menu-card-top">
                               <span className="oe-menu-name">{item.name}</span>
                               <span className="oe-menu-price">{fmtUsd(item.price)}</span>
                             </div>
-                            <div className="oe-qty">
-                              <button type="button" className="oe-qty-btn"
-                                onClick={() => setQty(item.id, qty - 1)}>−</button>
-                              <input type="number" min="0" className="oe-qty-input"
-                                value={qty}
-                                onChange={(e) => setQty(item.id, e.target.value)} />
-                              <button type="button" className="oe-qty-btn"
-                                onClick={() => setQty(item.id, qty + 1)}>+</button>
-                            </div>
+                            {timesAdded > 0 && (
+                              <div className="oe-menu-added-badge">{timesAdded}× in order</div>
+                            )}
+                            <button type="button" className="oe-add-line-btn"
+                              onClick={() => addLine(item)}>
+                              + Add{timesAdded > 0 ? ' another' : ''}
+                            </button>
                           </div>
                         );
                       })}
@@ -455,15 +543,27 @@ export default function OrderEdit() {
                 <div className="oe-summary-title">Order <em>summary</em></div>
               </div>
               <div className="oe-summary-body">
-                {selectedItems.length === 0
+                {lineItems.length === 0
                   ? <div className="oe-sum-empty">No items selected</div>
-                  : selectedItems.map((i) => (
-                      <div key={i.item_id} className="oe-sum-line">
-                        <span className="oe-sum-name">{i.name}</span>
-                        <span className="oe-sum-qty">×{i.quantity}</span>
-                        <span className="oe-sum-amt">{fmtUsd(i.price * i.quantity)}</span>
-                      </div>
-                    ))
+                  : lineItems.filter((l) => l.quantity > 0).map((line) => {
+                      const item = items.find((i) => i.id === line.itemId);
+                      if (!item) return null;
+                      const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+                      return (
+                        <div key={line.lineId} className="oe-sum-line">
+                          <div className="oe-sum-name">
+                            {item.name}
+                            {line.modifiers.length > 0 && (
+                              <div className="oe-sum-mods">
+                                {line.modifiers.map((m) => m.name).join(', ')}
+                              </div>
+                            )}
+                          </div>
+                          <span className="oe-sum-qty">×{line.quantity}</span>
+                          <span className="oe-sum-amt">{fmtUsd((item.price + modAdj) * line.quantity)}</span>
+                        </div>
+                      );
+                    })
                 }
               </div>
               <div className="oe-sum-total">
@@ -481,6 +581,5 @@ export default function OrderEdit() {
 
         </div>{/* end .oe-layout */}
       </div>
-    </>
   );
 }

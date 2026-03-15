@@ -100,6 +100,15 @@ func main() {
 			orders.DELETE("/:id", handlers.DeleteOrder)
 		}
 
+		modifiers := api.Group("/modifiers")
+		{
+			modifiers.GET("", handlers.GetModifiers)
+			modifiers.GET("/:id", handlers.GetModifier)
+			modifiers.POST("", handlers.CreateModifier)
+			modifiers.PUT("/:id", handlers.UpdateModifier)
+			modifiers.DELETE("/:id", handlers.DeleteModifier)
+		}
+
 		api.GET("/dashboard", handlers.GetDashboardStats)
 	}
 

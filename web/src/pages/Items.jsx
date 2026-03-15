@@ -9,6 +9,7 @@ const EMPTY_ORDER_FORM = {
   customer_id: '', delivery_address: '', notes: '',
   payment_method: 'cash', scheduled_date: '',
 };
+const EMPTY_MOD_FORM = { name: '', price_adjustment: '0' };
 
 /* ─── Helpers ────────────────────────────── */
 
@@ -139,6 +140,14 @@ export default function Items() {
   const [toast, setToast]               = useState(null);
   const [showUnavailable, setShowUnavailable] = useState(false);
 
+  /* Modifier state */
+  const [modifiers, setModifiers]         = useState([]);
+  const [modFormOpen, setModFormOpen]     = useState(false);
+  const [editingMod, setEditingMod]       = useState(null);
+  const [modForm, setModForm]             = useState(EMPTY_MOD_FORM);
+  const [modFormError, setModFormError]   = useState(null);
+  const [modSubmitting, setModSubmitting] = useState(false);
+
   /* ── Derived ── */
   const availableItems = items.filter((i) => i.available);
   const unavailableItems = items.filter((i) => !i.available);
@@ -202,6 +211,15 @@ export default function Items() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const loadModifiers = useCallback(async () => {
+    try {
+      const data = await api.getModifiers();
+      setModifiers(data || []);
+    } catch { /* non-fatal */ }
+  }, []);
+
+  useEffect(() => { loadModifiers(); }, [loadModifiers]);
 
   /* ── Quantity ── */
   const handleQty = (itemId, raw) => {
@@ -352,6 +370,45 @@ export default function Items() {
     value: orderForm[key],
     onChange: (e) => setOrderForm((p) => ({ ...p, [key]: e.target.value })),
   });
+
+  /* ── Modifier CRUD ── */
+  const openCreateMod = () => {
+    setModForm(EMPTY_MOD_FORM); setEditingMod(null);
+    setModFormError(null); setModFormOpen(true);
+  };
+  const openEditMod = (mod) => {
+    setModForm({ name: mod.name, price_adjustment: String(mod.price_adjustment) });
+    setEditingMod(mod); setModFormError(null); setModFormOpen(true);
+  };
+  const closeModForm = () => {
+    setModFormOpen(false); setEditingMod(null);
+    setModForm(EMPTY_MOD_FORM); setModFormError(null);
+  };
+  const handleModSubmit = async (e) => {
+    e.preventDefault();
+    setModSubmitting(true); setModFormError(null);
+    try {
+      const payload = { name: modForm.name, price_adjustment: parseFloat(modForm.price_adjustment) || 0 };
+      if (editingMod) {
+        await api.updateModifier(editingMod.id, payload);
+      } else {
+        await api.createModifier(payload);
+      }
+      closeModForm(); loadModifiers();
+    } catch (err) {
+      setModFormError(err.message);
+    } finally {
+      setModSubmitting(false);
+    }
+  };
+  const handleDeleteMod = async (mod) => {
+    try {
+      await api.deleteModifier(mod.id);
+      loadModifiers();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
 
   /* ── Render ── */
   return (
@@ -696,6 +753,81 @@ export default function Items() {
             )}
           </>
         )}
+
+        {/* ── Modifier Management Section ── */}
+        <div className="itm-mod-section">
+          <div className="itm-mod-head">
+            <h2 className="itm-mod-title">Item <em>Modifiers</em></h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {modFormOpen
+                ? <button className="btn-ghost" onClick={closeModForm}>✕ Cancel</button>
+                : <button className="btn-primary" onClick={openCreateMod}>+ Add Modifier</button>
+              }
+            </div>
+          </div>
+          <p className="itm-mod-desc">
+            Modifiers appear as selectable options when creating or editing an order.
+            Use positive values to add cost (e.g. +1.50) and negative to remove it (e.g. -0.50).
+          </p>
+
+          {/* Modifier slide-down form */}
+          <div className={`itm-mod-form-wrap ${modFormOpen ? 'open' : 'closed'}`}>
+            <form className="itm-mod-form" onSubmit={handleModSubmit}>
+              {modFormError && <div className="itm-form-error" style={{ marginBottom: 12 }}>{modFormError}</div>}
+              <div className="itm-form-body">
+                <div className="itm-field full">
+                  <label className="itm-label">Name *</label>
+                  <input
+                    className="itm-input"
+                    value={modForm.name}
+                    onChange={(e) => setModForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Extra Cheese"
+                    required
+                  />
+                </div>
+                <div className="itm-field">
+                  <label className="itm-label">Price Adjustment ($)</label>
+                  <input
+                    className="itm-input"
+                    type="number"
+                    step="0.01"
+                    value={modForm.price_adjustment}
+                    onChange={(e) => setModForm((p) => ({ ...p, price_adjustment: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              <div className="itm-form-actions">
+                <button type="submit" className="btn-primary" disabled={modSubmitting}>
+                  {modSubmitting ? 'Saving…' : editingMod ? 'Update modifier' : 'Create modifier'}
+                </button>
+                <button type="button" className="btn-ghost" onClick={closeModForm}>Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          {/* Modifier list */}
+          {modifiers.length === 0 ? (
+            <div className="itm-mod-empty">No modifiers yet — add your first above.</div>
+          ) : (
+            <div className="itm-mod-list">
+              {modifiers.map((mod) => (
+                <div key={mod.id} className="itm-mod-row">
+                  <span className="itm-mod-name">{mod.name}</span>
+                  <span className={`itm-mod-price ${mod.price_adjustment > 0 ? 'positive' : mod.price_adjustment < 0 ? 'negative' : ''}`}>
+                    {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
+                  </span>
+                  <div className="itm-mod-actions">
+                    <button className="btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }}
+                      onClick={() => openEditMod(mod)}>Edit</button>
+                    <button className="btn-danger" style={{ padding: '4px 10px', fontSize: '11px' }}
+                      onClick={() => handleDeleteMod(mod)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
       </div>
     </>

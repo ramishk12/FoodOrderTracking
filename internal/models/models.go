@@ -39,12 +39,30 @@ type Order struct {
 	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
+// ItemModifier is a reusable modifier that can be applied to any order item.
+type ItemModifier struct {
+	ID              int     `json:"id"`
+	Name            string  `json:"name"`
+	PriceAdjustment float64 `json:"price_adjustment"`
+}
+
+// OrderItemModifier is a modifier applied to a specific order item line.
+// ModifierID is 0 when the modifier was entered ad-hoc (not from item_modifiers table).
+type OrderItemModifier struct {
+	ID              int     `json:"id"`
+	OrderItemID     int     `json:"order_item_id"`
+	ModifierID      int     `json:"modifier_id,omitempty"`
+	ModifierName    string  `json:"modifier_name"`
+	PriceAdjustment float64 `json:"price_adjustment"`
+}
+
 type OrderItem struct {
-	ID        int     `json:"id"`
-	OrderID   int     `json:"order_id"`
-	ItemID    int     `json:"item_id"`
-	ItemName  string  `json:"item_name"`
-	Quantity  int     `json:"quantity"`
-	UnitPrice float64 `json:"unit_price"`
-	Subtotal  float64 `json:"subtotal"`
+	ID        int                 `json:"id"`
+	OrderID   int                 `json:"order_id"`
+	ItemID    int                 `json:"item_id"`
+	ItemName  string              `json:"item_name"`
+	Quantity  int                 `json:"quantity"`
+	UnitPrice float64             `json:"unit_price"`
+	Subtotal  float64             `json:"subtotal"`
+	Modifiers []OrderItemModifier `json:"modifiers"`
 }
