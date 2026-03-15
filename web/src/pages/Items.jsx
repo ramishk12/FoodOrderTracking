@@ -12,6 +12,24 @@ const EMPTY_ORDER_FORM = {
 };
 const EMPTY_MOD_FORM = { name: '', price_adjustment: '0' };
 
+// groupOrderItems: identical item+modifier combos are merged into one line.
+// Same logic as Orders.jsx so summaries look consistent everywhere.
+function groupOrderItems(lines) {
+  const groups = [];
+  const seen = new Map();
+  for (const line of lines) {
+    const modKey = (line.modifiers || []).map((m) => m.id).sort().join(',');
+    const key = `${line.itemId}::${modKey}`;
+    if (seen.has(key)) {
+      groups[seen.get(key)].quantity += line.quantity;
+    } else {
+      seen.set(key, groups.length);
+      groups.push({ ...line });
+    }
+  }
+  return groups;
+}
+
 /* ─── Helpers ────────────────────────────── */
 
 function fmtUsd(n) {
@@ -61,6 +79,8 @@ function ItemCard({
   modError, modSubmitting,
   editingMod, onStartEditMod, onCancelEditMod,
   onModSubmit, onDeleteMod,
+  // Order modifier selection (only active when qty > 0)
+  orderSelectedMods, onToggleOrderMod,
 }) {
   const selected = qty > 0;
   const unavailable = !item.available;
@@ -82,18 +102,47 @@ function ItemCard({
         {unavailable ? (
           <div className="itm-unavailable-badge">Unavailable</div>
         ) : (
-          <div className="itm-qty-row">
-            <button className="itm-qty-btn"
-              onClick={() => onQtyChange(item.id, qty - 1)}>−</button>
-            <input
-              className="itm-qty-input"
-              type="number" min="0"
-              value={qty}
-              onChange={(e) => onQtyChange(item.id, e.target.value)}
-            />
-            <button className="itm-qty-btn"
-              onClick={() => onQtyChange(item.id, qty + 1)}>+</button>
-          </div>
+          <>
+            <div className="itm-qty-row">
+              <button className="itm-qty-btn"
+                onClick={() => onQtyChange(item.id, qty - 1)}>−</button>
+              <input
+                className="itm-qty-input"
+                type="number" min="0"
+                value={qty}
+                onChange={(e) => onQtyChange(item.id, e.target.value)}
+              />
+              <button className="itm-qty-btn"
+                onClick={() => onQtyChange(item.id, qty + 1)}>+</button>
+            </div>
+
+            {/* Modifier selection for this order line — only shown when item is selected */}
+            {selected && mods.length > 0 && (
+              <div className="itm-order-mods">
+                <div className="itm-order-mods-label">Add to order:</div>
+                <div className="itm-order-mods-chips">
+                  {mods.map((mod) => {
+                    const active = (orderSelectedMods || []).some((m) => m.id === mod.id);
+                    return (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        className={`itm-order-mod-chip${active ? ' active' : ''}`}
+                        onClick={() => onToggleOrderMod(item.id, mod)}
+                      >
+                        {mod.name}
+                        {mod.price_adjustment !== 0 && (
+                          <span className="itm-order-mod-adj">
+                            {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -204,6 +253,8 @@ export default function Items() {
   const [orderForm, setOrderForm]           = useState(EMPTY_ORDER_FORM);
   const [orderFormError, setOrderFormError] = useState(null);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
+  // selectedModifiers[itemId] = array of modifier objects selected for that item's order line
+  const [selectedModifiers, setSelectedModifiers] = useState({});
 
   const [search, setSearch]             = useState('');
   const [catFilter, setCatFilter]       = useState('');
@@ -240,10 +291,22 @@ export default function Items() {
   }, {});
 
   const selectedItems = availableItems.filter((i) => (quantities[i.id] || 0) > 0);
-  const totalAmount = selectedItems.reduce(
-    (sum, i) => sum + i.price * (quantities[i.id] || 0), 0
-  );
-  const totalQty = selectedItems.reduce((sum, i) => sum + (quantities[i.id] || 0), 0);
+
+  // Build line objects used for summary grouping and order submission
+  const orderLines = selectedItems.map((i) => ({
+    itemId:    i.id,
+    item_name: i.name,
+    item:      i,
+    quantity:  quantities[i.id] || 0,
+    modifiers: selectedModifiers[i.id] || [],
+  }));
+
+  const totalAmount = orderLines.reduce((sum, line) => {
+    const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+    return sum + (line.item.price + modAdj) * line.quantity;
+  }, 0);
+
+  const totalQty = orderLines.reduce((sum, l) => sum + l.quantity, 0);
 
   /* ── Helpers ── */
   const showToast = (message, type = 'success') => {
@@ -256,6 +319,19 @@ export default function Items() {
       const r = { ...prev };
       Object.keys(r).forEach((k) => (r[k] = 0));
       return r;
+    });
+    setSelectedModifiers({});
+  };
+
+  // Toggle a modifier for an item in the order selection
+  const toggleOrderModifier = (itemId, mod) => {
+    setSelectedModifiers((prev) => {
+      const current = prev[itemId] || [];
+      const has = current.some((m) => m.id === mod.id);
+      return {
+        ...prev,
+        [itemId]: has ? current.filter((m) => m.id !== mod.id) : [...current, mod],
+      };
     });
   };
 
@@ -282,10 +358,23 @@ export default function Items() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Open the order form automatically when the first item is selected
+  useEffect(() => {
+    if (totalQty > 0 && !orderFormOpen) setOrderFormOpen(true);
+  }, [totalQty]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── Quantity ── */
   const handleQty = (itemId, raw) => {
     const qty = Math.max(0, parseInt(raw) || 0);
     setQuantities((prev) => ({ ...prev, [itemId]: qty }));
+    // Clear modifier selection when item is removed from order
+    if (qty === 0) {
+      setSelectedModifiers((prev) => {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+    }
   };
 
   /* ── Item form ── */
@@ -305,7 +394,6 @@ export default function Items() {
     setEditingItem(item);
     setItemFormError(null);
     setItemFormOpen(true);
-    setOrderFormOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -366,12 +454,6 @@ export default function Items() {
   };
 
   /* ── Order form ── */
-  const openOrderForm = () => {
-    setOrderFormOpen(true);
-    setItemFormOpen(false);
-    setOrderFormError(null);
-  };
-
   const closeOrderForm = () => {
     setOrderFormOpen(false);
     setOrderForm(EMPTY_ORDER_FORM);
@@ -402,7 +484,15 @@ export default function Items() {
         notes: orderForm.notes,
         payment_method: orderForm.payment_method,
         scheduled_date: localDatetimeToUtcIso(orderForm.scheduled_date),
-        items: selectedItems.map((i) => ({ item_id: i.id, quantity: quantities[i.id] })),
+        items: orderLines.map((line) => ({
+          item_id:   line.itemId,
+          quantity:  line.quantity,
+          modifiers: line.modifiers.map((m) => ({
+            modifier_id:      m.id,
+            name:             m.name,
+            price_adjustment: m.price_adjustment,
+          })),
+        })),
       });
       showToast('Order placed successfully');
       closeOrderForm();
@@ -600,18 +690,28 @@ export default function Items() {
                 {/* Order summary */}
                 <div className="ord-summary">
                   <div className="ord-summary-title">Order summary</div>
-                  {selectedItems.length === 0
+                  {orderLines.length === 0
                     ? <div className="ord-summary-empty">Select items from the menu below</div>
                     : <>
-                        {selectedItems.map((item) => (
-                          <div key={item.id} className="ord-line">
-                            <span className="ord-line-name">{item.name}</span>
-                            <span className="ord-line-qty">×{quantities[item.id]}</span>
-                            <span className="ord-line-price">
-                              {fmtUsd(item.price * quantities[item.id])}
-                            </span>
-                          </div>
-                        ))}
+                        {groupOrderItems(orderLines).map((line, i) => {
+                          const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+                          return (
+                            <div key={i} className="ord-line">
+                              <div className="ord-line-body">
+                                <span className="ord-line-name">{line.item_name}</span>
+                                {line.modifiers.length > 0 && (
+                                  <span className="ord-line-mods">
+                                    {line.modifiers.map((m) => m.name).join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="ord-line-qty">×{line.quantity}</span>
+                              <span className="ord-line-price">
+                                {fmtUsd((line.item.price + modAdj) * line.quantity)}
+                              </span>
+                            </div>
+                          );
+                        })}
                         <div className="ord-total">
                           <span className="ord-total-label">Total</span>
                           <span className="ord-total-value">{fmtUsd(totalAmount)}</span>
@@ -738,6 +838,8 @@ export default function Items() {
                       onCancelEditMod={cancelEditMod}
                       onModSubmit={handleModSubmit}
                       onDeleteMod={handleDeleteMod}
+                      orderSelectedMods={selectedModifiers[item.id] || []}
+                      onToggleOrderMod={toggleOrderModifier}
                     />
                   ))}
                 </div>
@@ -781,6 +883,8 @@ export default function Items() {
                         onCancelEditMod={cancelEditMod}
                         onModSubmit={handleModSubmit}
                         onDeleteMod={handleDeleteMod}
+                        orderSelectedMods={[]}
+                        onToggleOrderMod={() => {}}
                       />
                     ))}
                   </div>
@@ -788,7 +892,7 @@ export default function Items() {
               </div>
             )}
 
-            {/* Sticky order bar — visible when items selected */}
+            {/* Sticky order bar — summary only; order form opens automatically */}
             {totalQty > 0 && (
               <div className="itm-order-bar">
                 <div className="itm-order-bar-left">
@@ -796,17 +900,23 @@ export default function Items() {
                     {totalQty} item{totalQty !== 1 ? 's' : ''} selected
                   </span>
                   <span className="itm-order-bar-items">
-                    {selectedItems.map((i) => `${quantities[i.id]}× ${i.name}`).join(' · ')}
+                    {groupOrderItems(orderLines).map((line, i) => {
+                      const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+                      const linePrice = (line.item.price + modAdj) * line.quantity;
+                      const modStr = line.modifiers.length > 0
+                        ? ` (${line.modifiers.map((m) => m.name).join(', ')})`
+                        : '';
+                      return (
+                        <span key={i} className="itm-order-bar-item">
+                          {line.quantity}× {line.item_name}{modStr} · {fmtUsd(linePrice)}
+                        </span>
+                      );
+                    })}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                   <span className="itm-order-bar-total">{fmtUsd(totalAmount)}</span>
-                  <div className="itm-order-bar-actions">
-                    <button className="itm-order-bar-clear" onClick={resetQty}>Clear</button>
-                    <button className="itm-order-bar-btn" onClick={openOrderForm}>
-                      Place Order →
-                    </button>
-                  </div>
+                  <button className="itm-order-bar-clear" onClick={resetQty}>Clear</button>
                 </div>
               </div>
             )}
