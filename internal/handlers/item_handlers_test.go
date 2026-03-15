@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,11 +23,12 @@ import (
 var itemQueryCols = []string{"id", "name", "description", "price", "category", "available", "created_at", "updated_at"}
 
 const (
-	itemQueryRegex       = `SELECT id, name, description, price, category, available, created_at, updated_at\s+FROM items`
-	insertItemQueryRegex = `INSERT INTO items`
-	updateItemExecRegex  = `UPDATE items SET`
-	deactivateExecRegex  = `UPDATE items SET available = false`
-	activateExecRegex    = `UPDATE items SET available = true`
+	itemQueryRegex         = `SELECT id, name, description, price, category, available, created_at, updated_at\s+FROM items`
+	insertItemQueryRegex   = `INSERT INTO items`
+	updateItemExecRegex    = `UPDATE items SET`
+	deactivateExecRegex    = `UPDATE items SET available = false`
+	activateExecRegex      = `UPDATE items SET available = true`
+	itemModifierQueryRegex = `SELECT id, item_id, name, price_adjustment FROM item_modifiers WHERE item_id IN`
 )
 
 // ── Row helpers ───────────────────────────────────────────────────────────────
@@ -34,6 +36,14 @@ const (
 func itemRow(id int, name, description string, price float64, category string, available bool) *sqlmock.Rows {
 	return sqlmock.NewRows(itemQueryCols).
 		AddRow(id, name, description, price, category, available, time.Now(), time.Now())
+}
+
+// mockNoModifiers sets up the item_modifiers query returning no rows for the
+// given item IDs. Used when items exist but have no modifiers configured.
+func mockNoModifiers(m sqlmock.Sqlmock, itemIDs ...driver.Value) {
+	m.ExpectQuery(itemModifierQueryRegex).
+		WithArgs(itemIDs...).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "item_id", "name", "price_adjustment"}))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -53,6 +63,7 @@ func TestGetItems(t *testing.T) {
 						AddRow(1, "Pizza", "Delicious pizza", 12.99, "Main", true, time.Now(), time.Now()).
 						AddRow(2, "Burger", "Tasty burger", 8.99, "Main", true, time.Now(), time.Now()).
 						AddRow(3, "Salad", "Fresh salad", 6.99, "Side", true, time.Now(), time.Now()))
+				mockNoModifiers(m, 1, 2, 3)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -96,6 +107,7 @@ func TestGetItems(t *testing.T) {
 						AddRow(1, "Coke", "Beverage", 2.99, "Drinks", true, time.Now(), time.Now()).
 						AddRow(2, "Pasta", "Italian pasta", 10.99, "Main", true, time.Now(), time.Now()).
 						AddRow(3, "Pizza", "Main dish", 12.99, "Main", true, time.Now(), time.Now()))
+				mockNoModifiers(m, 1, 2, 3)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -114,6 +126,8 @@ func TestGetItems(t *testing.T) {
 					WillReturnRows(sqlmock.NewRows(itemQueryCols).
 						AddRow("not-an-int", "Bad Row", "", 0, "", false, time.Now(), time.Now()).
 						AddRow(2, "Good Row", "", 9.99, "Main", true, time.Now(), time.Now()))
+				// Only item 2 was scanned successfully; bad row is skipped.
+				mockNoModifiers(m, 2)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -161,6 +175,7 @@ func TestGetItem(t *testing.T) {
 				m.ExpectQuery(itemQueryRegex).
 					WithArgs(1).
 					WillReturnRows(itemRow(1, "Pizza", "Delicious pizza", 12.99, "Main", true))
+				mockNoModifiers(m, 1)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {

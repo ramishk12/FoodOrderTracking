@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -27,11 +28,25 @@ var orderCols = []string{
 // itemCols are the columns returned by populateOrderItems.
 var itemCols = []string{"id", "order_id", "item_id", "name", "quantity", "unit_price", "subtotal"}
 
+// orderItemModCols are the columns returned by the order_item_modifiers query.
+var orderItemModCols = []string{"id", "order_item_id", "modifier_id", "modifier_name", "price_adjustment"}
+
+// mockNoOrderItemModifiers sets up the order_item_modifiers query returning no rows
+// for the given order item IDs. Most tests have no modifiers on order items.
+func mockNoOrderItemModifiers(m sqlmock.Sqlmock, orderItemIDs ...driver.Value) {
+	m.ExpectQuery(orderItemModifierQueryRegex).
+		WithArgs(orderItemIDs...).
+		WillReturnRows(sqlmock.NewRows(orderItemModCols))
+}
+
 // orderQueryRegex matches the shared SELECT used by all list/single-order queries.
 const orderQueryRegex = `SELECT o\.id, o\.customer_id, o\.delivery_address, o\.status, o\.total_amount,`
 
 // populateItemsQueryRegex matches the single IN-clause query used by populateOrderItems.
 const populateItemsQueryRegex = `SELECT oi\.id, oi\.order_id, oi\.item_id, COALESCE\(i\.name`
+
+// orderItemModifierQueryRegex matches the query that fetches modifiers for order items.
+const orderItemModifierQueryRegex = `SELECT id, order_item_id, COALESCE\(modifier_id`
 
 func TestGetOrders(t *testing.T) {
 	tests := []struct {
@@ -51,6 +66,7 @@ func TestGetOrders(t *testing.T) {
 					WithArgs(1).
 					WillReturnRows(sqlmock.NewRows(itemCols).
 						AddRow(1, 1, 1, "Pizza", 2, 12.99, 25.98))
+				mockNoOrderItemModifiers(m, 1)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -116,6 +132,7 @@ func TestGetOrders(t *testing.T) {
 					WillReturnRows(sqlmock.NewRows(itemCols).
 						AddRow(1, 1, 1, "Pizza", 2, 12.99, 25.98).
 						AddRow(2, 2, 2, "Burger", 1, 15.00, 15.00))
+				mockNoOrderItemModifiers(m, 1, 2)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -171,6 +188,7 @@ func TestGetScheduledOrders(t *testing.T) {
 					WithArgs(1).
 					WillReturnRows(sqlmock.NewRows(itemCols).
 						AddRow(1, 1, 1, "Pizza", 2, 12.99, 25.98))
+				mockNoOrderItemModifiers(m, 1)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -393,6 +411,7 @@ func TestGetOrder(t *testing.T) {
 					WithArgs(1).
 					WillReturnRows(sqlmock.NewRows(itemCols).
 						AddRow(1, 1, 1, "Pizza", 2, 12.99, 25.98))
+				mockNoOrderItemModifiers(m, 1)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -512,8 +531,10 @@ func TestCreateOrder(t *testing.T) {
 					WillReturnRows(sqlmock.NewRows([]string{"price"}).AddRow(12.99))
 				m.ExpectQuery(`INSERT INTO orders`).
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
-				m.ExpectExec(`INSERT INTO order_items`).
-					WillReturnResult(sqlmock.NewResult(1, 1))
+				// INSERT INTO order_items now uses RETURNING id (QueryRow, not Exec)
+				m.ExpectQuery(`INSERT INTO order_items`).
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+				// No modifiers in request body, so no order_item_modifiers insert expected.
 				m.ExpectCommit()
 			},
 			expectedStatus: http.StatusCreated,
@@ -587,8 +608,8 @@ func TestCreateOrder(t *testing.T) {
 					WillReturnRows(sqlmock.NewRows([]string{"price"}).AddRow(10.00))
 				m.ExpectQuery(`INSERT INTO orders`).
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(2))
-				m.ExpectExec(`INSERT INTO order_items`).
-					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectQuery(`INSERT INTO order_items`).
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(2))
 				m.ExpectCommit()
 			},
 			expectedStatus: http.StatusCreated,
@@ -596,6 +617,37 @@ func TestCreateOrder(t *testing.T) {
 				var resp map[string]interface{}
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 				assert.Equal(t, "pending", resp["status"])
+			},
+		},
+		{
+			name: "Creates order with modifiers",
+			body: `{"customer_id":1,"delivery_address":"123 Main","payment_method":"cash","items":[{"item_id":1,"quantity":1,"modifiers":[{"modifier_id":10,"name":"Extra Cheese","price_adjustment":1.50}]}]}`,
+			setupMock: func(m sqlmock.Sqlmock) {
+				m.ExpectQuery(`SELECT EXISTS\(SELECT 1 FROM customers WHERE id = \$1\)`).
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+				m.ExpectBegin()
+				m.ExpectQuery(`SELECT price FROM items WHERE id = \$1`).
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"price"}).AddRow(10.00))
+				m.ExpectQuery(`INSERT INTO orders`).
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(3))
+				// order_items insert returns the new row id
+				m.ExpectQuery(`INSERT INTO order_items`).
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(5))
+				// modifier insert for order_item_id=5
+				m.ExpectExec(`INSERT INTO order_item_modifiers`).
+					WithArgs(5, 10, "Extra Cheese", 1.50).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectCommit()
+			},
+			expectedStatus: http.StatusCreated,
+			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
+				var resp map[string]interface{}
+				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+				assert.Equal(t, float64(3), resp["id"])
+				// total = (10.00 + 1.50) * 1 = 11.50
+				assert.InDelta(t, 11.50, resp["total_amount"], 0.01)
 			},
 		},
 	}
@@ -649,8 +701,9 @@ func TestUpdateOrder(t *testing.T) {
 				m.ExpectQuery(`SELECT price FROM items WHERE id = \$1`).
 					WithArgs(1).
 					WillReturnRows(sqlmock.NewRows([]string{"price"}).AddRow(12.99))
-				m.ExpectExec(`INSERT INTO order_items`).
-					WillReturnResult(sqlmock.NewResult(1, 1))
+				// INSERT INTO order_items now uses RETURNING id (QueryRow, not Exec)
+				m.ExpectQuery(`INSERT INTO order_items`).
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 				m.ExpectCommit()
 			},
 			expectedStatus: http.StatusOK,
