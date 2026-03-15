@@ -87,6 +87,13 @@ func main() {
 			items.PUT("/:id", handlers.UpdateItem)
 			items.DELETE("/:id", handlers.DeactivateItem)
 			items.POST("/:id/activate", handlers.ActivateItem)
+
+			// Item modifiers (item-scoped)
+			items.GET("/:id/modifiers", handlers.GetItemModifiers)
+			items.POST("/:id/modifiers", handlers.CreateItemModifier)
+			items.GET("/:id/modifiers/:modifierId", handlers.GetItemModifier)
+			items.PUT("/:id/modifiers/:modifierId", handlers.UpdateItemModifier)
+			items.DELETE("/:id/modifiers/:modifierId", handlers.DeleteItemModifier)
 		}
 
 		orders := api.Group("/orders")
@@ -98,15 +105,6 @@ func main() {
 			orders.GET("/:id", handlers.GetOrder)
 			orders.PUT("/:id", handlers.UpdateOrder)
 			orders.DELETE("/:id", handlers.DeleteOrder)
-		}
-
-		modifiers := api.Group("/modifiers")
-		{
-			modifiers.GET("", handlers.GetModifiers)
-			modifiers.GET("/:id", handlers.GetModifier)
-			modifiers.POST("", handlers.CreateModifier)
-			modifiers.PUT("/:id", handlers.UpdateModifier)
-			modifiers.DELETE("/:id", handlers.DeleteModifier)
 		}
 
 		api.GET("/dashboard", handlers.GetDashboardStats)

@@ -76,6 +76,10 @@ func GetItems(c *gin.Context) {
 		return
 	}
 
+	if err := populateItemModifiers(items); err != nil {
+		log.Printf("Error populating item modifiers: %v", err)
+	}
+
 	c.JSON(http.StatusOK, items)
 }
 
@@ -97,7 +101,12 @@ func GetItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, i)
+	items := []models.Item{i}
+	if err := populateItemModifiers(items); err != nil {
+		log.Printf("Error populating modifiers for item %d: %v", id, err)
+	}
+
+	c.JSON(http.StatusOK, items[0])
 }
 
 // CreateItem inserts a new menu item.

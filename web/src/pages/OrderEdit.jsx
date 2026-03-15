@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
+
 /* ─── Helpers ────────────────────────────── */
 
 const EMPTY_CUST = { name: '', phone: '', email: '', address: '' };
@@ -51,11 +52,12 @@ export default function OrderEdit() {
     customer_id: '', delivery_address: '',
     notes: '', payment_method: 'cash', scheduled_date: '',
   });
-  // lineItems: array so same item can appear multiple times with different modifiers
+  // lineItems: array so the same item can appear multiple times with different modifiers.
   // Each entry: { lineId, itemId, quantity, modifiers[] }
+  // Item-specific modifiers come from item.modifiers (loaded with items list).
   const [lineItems, setLineItems] = useState([]);
-  const [modifiers, setModifiers] = useState([]);       // available modifiers from API
-  const [openModPicker, setOpenModPicker] = useState(null); // lineId with open picker
+																					   
+  const [openModPicker, setOpenModPicker] = useState(null); // lineId with picker open
 
   const [showNewCust, setShowNewCust] = useState(false);
   const [custForm, setCustForm]       = useState(EMPTY_CUST);
@@ -69,13 +71,13 @@ export default function OrderEdit() {
   const load = useCallback(async () => {
     try {
       setLoading(true); setError(null);
-      const [orderData, customersData, itemsData, modifiersData] = await Promise.all([
-        api.getOrder(id), api.getCustomers(), api.getItems(), api.getModifiers(),
+      const [orderData, customersData, itemsData] = await Promise.all([
+        api.getOrder(id), api.getCustomers(), api.getItems(),
       ]);
       setOrder(orderData);
       setCustomers(customersData || []);
       setItems(itemsData || []);
-      setModifiers(modifiersData || []);
+										
 
       setFormData({
         customer_id:      orderData.customer_id ? String(orderData.customer_id) : '',
@@ -257,20 +259,26 @@ export default function OrderEdit() {
       <div className="oe-load">
         <div className="oe-spinner" />
         <span className="oe-load-text">Loading order…</span>
+			  
       </div>
     </div>
   );
 
   if (error) return (
+	  
+						  
     <div className="oe-root">
       <div className="oe-error-page">
         <p className="oe-error-msg">{error}</p>
         <button className="oe-retry" onClick={load}>Try again</button>
+			  
       </div>
     </div>
   );
 
   return (
+	  
+						  
     <div className="oe-root">
 
         {toast && <div className={`oe-toast ${toast.type}`}>{toast.msg}</div>}
@@ -469,26 +477,36 @@ export default function OrderEdit() {
                               ))}
                             </div>
                           )}
-                          {/* Modifier picker */}
-                          {isPickerOpen && modifiers.length > 0 && (
-                            <div className="oe-mod-picker">
-                              {modifiers.map((mod) => {
-                                const active = line.modifiers.some((m) => m.modifier_id === mod.id);
-                                return (
-                                  <button key={mod.id} type="button"
-                                    className={`oe-mod-option${active ? ' active' : ''}`}
-                                    onClick={() => toggleModifier(line.lineId, mod)}>
-                                    {mod.name}
-                                    {mod.price_adjustment !== 0 && (
-                                      <span className="oe-mod-opt-adj">
-                                        {mod.price_adjustment > 0 ? '+' : ''}{fmtUsd(mod.price_adjustment)}
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
+                          {/* Modifier picker — uses this item's own modifiers */}
+                          {isPickerOpen && (() => {
+                            const itemMods = item.modifiers || [];
+                            if (itemMods.length === 0) return (
+                              <div className="oe-mod-picker">
+                                <div className="oe-mod-picker-empty">
+                                  No modifiers for this item — add them on the Menu page.
+                                </div>
+                              </div>
+                            );
+                            return (
+                              <div className="oe-mod-picker">
+                                {itemMods.map((mod) => {
+                                  const active = line.modifiers.some((m) => m.modifier_id === mod.id);
+                                  return (
+                                    <button key={mod.id} type="button"
+                                      className={`oe-mod-option${active ? ' active' : ''}`}
+                                      onClick={() => toggleModifier(line.lineId, mod)}>
+                                      {mod.name}
+                                      {mod.price_adjustment !== 0 && (
+                                        <span className="oe-mod-opt-adj">
+                                          {mod.price_adjustment > 0 ? '+' : ''}{fmtUsd(mod.price_adjustment)}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}

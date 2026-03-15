@@ -2743,7 +2743,10 @@ body {
 }
 .itm-qty-input::-webkit-inner-spin-button,
 .itm-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-.itm-qty-input[type=number] { -moz-appearance: textfield; }
+.itm-qty-input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 
 .itm-card-footer {
   display: flex; align-items: center; justify-content: space-between;
@@ -3528,7 +3531,10 @@ body {
 }
 .oe-qty-input::-webkit-inner-spin-button,
 .oe-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-.oe-qty-input[type=number] { -moz-appearance: textfield; }
+.oe-qty-input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 
 .oe-no-items {
   font-family: var(--font-mono); font-size: 11px;
@@ -3747,4 +3753,180 @@ body {
 .oe-sum-mods {
   font-family: var(--font-mono); font-size: 10px; color: var(--muted);
   margin-top: 2px;
+}
+
+/* ─── Items page: Modifier management section ─────────────────────────────── */
+ 
+.itm-mod-section {
+  margin-top: 48px;
+  border-top: 1px solid var(--rule);
+  padding-top: 32px;
+}
+.itm-mod-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.itm-mod-title {
+  font-family: var(--font-display); font-size: 22px; font-weight: 600;
+  color: var(--espresso);
+}
+.itm-mod-title em { font-style: italic; color: var(--amber); }
+.itm-mod-desc {
+  font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+  margin-bottom: 16px; line-height: 1.6;
+}
+.itm-mod-form-wrap { overflow: hidden; transition: max-height 0.3s ease; }
+.itm-mod-form-wrap.open  { max-height: 300px; }
+.itm-mod-form-wrap.closed { max-height: 0; }
+.itm-mod-form {
+  padding: 20px; background: #faf8f4;
+  border-radius: 8px; margin-bottom: 16px;
+}
+.itm-mod-empty {
+  font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+  padding: 20px 0; text-align: center;
+}
+.itm-mod-list { display: flex; flex-direction: column; gap: 2px; }
+.itm-mod-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; background: white;
+  border-radius: 6px; border: 1px solid var(--rule);
+}
+.itm-mod-name {
+  flex: 1; font-family: var(--font-body);
+  font-size: 13px; color: var(--espresso);
+}
+.itm-mod-price {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--muted); min-width: 48px; text-align: right;
+}
+.itm-mod-price.positive { color: #15803d; }
+.itm-mod-price.negative { color: #b91c1c; }
+.itm-mod-actions { display: flex; gap: 6px; margin-left: auto; }
+ 
+/* ─── OrderEdit page: Line item modifiers ─────────────────────────────────── */
+ 
+.oe-item-row-main {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.oe-mod-toggle {
+  font-family: var(--font-mono); font-size: 11px;
+  background: var(--rule); border: none; border-radius: 4px;
+  padding: 3px 8px; cursor: pointer; color: var(--espresso);
+  transition: background 0.15s;
+}
+.oe-mod-toggle:hover { background: var(--amber); color: white; }
+.oe-remove-line {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 13px; padding: 2px 4px;
+  transition: color 0.15s;
+}
+.oe-remove-line:hover { color: var(--red); }
+ 
+/* Applied modifier pills below the line */
+.oe-mods-applied {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 6px; padding-left: 4px;
+}
+.oe-mod-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10px;
+  background: #f0f9ff; color: #0369a1;
+  border: 1px solid #bae6fd; border-radius: 999px;
+  padding: 2px 8px;
+}
+.oe-mod-adj {
+  font-weight: 600;
+  color: #15803d;
+}
+ 
+/* Modifier picker dropdown */
+.oe-mod-picker {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px; padding: 12px;
+  background: #faf8f4; border-radius: 8px;
+  border: 1px solid var(--rule);
+}
+.oe-mod-option {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px;
+  background: white; border: 1px solid var(--rule);
+  border-radius: 6px; padding: 6px 10px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  color: var(--espresso);
+}
+.oe-mod-option:hover { border-color: var(--amber); }
+.oe-mod-option.active {
+  background: var(--amber); color: white;
+  border-color: var(--amber);
+}
+.oe-mod-opt-adj {
+  font-size: 10px; opacity: 0.85;
+}
+ 
+/* Menu card: "add line" button and count badge */
+.oe-add-line-btn {
+  width: 100%; margin-top: 8px;
+  font-family: var(--font-mono); font-size: 11px;
+  background: none; border: 1px dashed var(--rule);
+  border-radius: 6px; padding: 5px 0; cursor: pointer;
+  color: var(--muted); transition: border-color 0.15s, color 0.15s;
+}
+.oe-add-line-btn:hover { border-color: var(--amber); color: var(--amber); }
+.oe-menu-added-badge {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--amber); margin-top: 4px;
+}
+.oe-menu-hint {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--muted); margin-bottom: 16px; line-height: 1.6;
+}
+ 
+/* Summary panel: modifier names below item name */
+.oe-sum-mods {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--muted); margin-top: 2px;
+}
+ 
+/* ─── Items page: per-card modifier panel ─────────────────────────────────── */
+ 
+.itm-mod-panel { overflow: hidden; transition: max-height 0.25s ease; }
+.itm-mod-panel.open  { max-height: 500px; }
+.itm-mod-panel.closed { max-height: 0; }
+.itm-mod-panel-inner {
+  padding: 12px; background: #faf8f4;
+  border-top: 1px solid var(--rule);
+}
+.itm-mod-inline-form {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px;
+}
+.itm-mod-edit-input {
+  font-family: var(--font-mono); font-size: 12px;
+  border: 1px solid var(--rule); border-radius: 5px;
+  padding: 5px 8px; flex: 1; min-width: 80px;
+  background: white; color: var(--espresso);
+}
+.itm-mod-edit-input:focus {
+  outline: none; border-color: var(--amber);
+}
+.itm-mod-price-input { flex: 0 0 72px; }
+.itm-mod-add-form {
+  border-top: 1px dashed var(--rule);
+  padding-top: 8px; margin-top: 8px;
+}
+.itm-mod-toggle-btn {
+  font-family: var(--font-mono); font-size: 11px;
+  background: var(--rule); border: none; border-radius: 4px;
+  padding: 4px 10px; cursor: pointer; color: var(--espresso);
+  transition: background 0.15s, color 0.15s;
+}
+.itm-mod-toggle-btn:hover { background: #d4c9b4; }
+.itm-mod-toggle-btn.active { background: var(--amber); color: white; }
+ 
+/* ─── OrderEdit: empty modifier picker message ──────────────────────────── */
+ 
+.oe-mod-picker-empty {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--muted); padding: 8px; width: 100%;
 }

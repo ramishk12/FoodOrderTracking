@@ -55,9 +55,9 @@ export const api = {
 
   getDashboardStats: () => request('/dashboard'),
 
-  getModifiers: () => request('/modifiers'),
-  getModifier: (id) => request(`/modifiers/${id}`),
-  createModifier: (data) => request('/modifiers', { method: 'POST', body: data }),
-  updateModifier: (id, data) => request(`/modifiers/${id}`, { method: 'PUT', body: data }),
-  deleteModifier: (id) => request(`/modifiers/${id}`, { method: 'DELETE' }),
+  // Item modifiers (item-scoped)
+  getItemModifiers: (itemId) => request(`/items/${itemId}/modifiers`),
+  createItemModifier: (itemId, data) => request(`/items/${itemId}/modifiers`, { method: 'POST', body: data }),
+  updateItemModifier: (itemId, modifierId, data) => request(`/items/${itemId}/modifiers/${modifierId}`, { method: 'PUT', body: data }),
+  deleteItemModifier: (itemId, modifierId) => request(`/items/${itemId}/modifiers/${modifierId}`, { method: 'DELETE' }),
 };

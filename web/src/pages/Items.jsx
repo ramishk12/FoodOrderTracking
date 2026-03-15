@@ -59,9 +59,18 @@ function ConfirmDialog({ title, body, onConfirm, onCancel }) {
 
 /* ─── ItemCard ───────────────────────────── */
 
-function ItemCard({ item, qty, onQtyChange, onEdit, onDelete, onActivate, delay }) {
+function ItemCard({
+  item, qty, onQtyChange, onEdit, onDelete, onActivate, delay,
+  modPanelOpen, onToggleModPanel,
+  modForm, onModFormChange,
+  modError, modSubmitting,
+  editingMod, onStartEditMod, onCancelEditMod,
+  onModSubmit, onDeleteMod,
+}) {
   const selected = qty > 0;
   const unavailable = !item.available;
+  const mods = item.modifiers || [];
+
   return (
     <div
       className={`itm-card${selected ? ' selected' : ''}${unavailable ? ' unavailable' : ''}`}
@@ -92,10 +101,79 @@ function ItemCard({ item, qty, onQtyChange, onEdit, onDelete, onActivate, delay 
           </div>
         )}
       </div>
+
+      {/* Per-item modifier panel */}
+      <div className={`itm-mod-panel ${modPanelOpen ? 'open' : 'closed'}`}>
+        <div className="itm-mod-panel-inner">
+          {modError && <div className="itm-form-error" style={{ marginBottom: 8, fontSize: 12 }}>{modError}</div>}
+
+          {mods.length > 0 && (
+            <div className="itm-mod-list">
+              {mods.map((mod) => {
+                const isEditing = editingMod?.mod?.id === mod.id;
+                return (
+                  <div key={mod.id} className="itm-mod-row">
+                    {isEditing ? (
+                      <form className="itm-mod-inline-form" onSubmit={(e) => onModSubmit(e, item)}>
+                        <input className="itm-mod-edit-input"
+                          value={modForm?.name || ''}
+                          onChange={(e) => onModFormChange(item.id, 'name', e.target.value)}
+                          placeholder="Name" required />
+                        <input className="itm-mod-edit-input itm-mod-price-input"
+                          type="number" step="0.01"
+                          value={modForm?.price_adjustment ?? '0'}
+                          onChange={(e) => onModFormChange(item.id, 'price_adjustment', e.target.value)} />
+                        <button type="submit" className="btn-ghost" style={{ fontSize: 11 }}
+                          disabled={modSubmitting}>Save</button>
+                        <button type="button" className="btn-ghost" style={{ fontSize: 11 }}
+                          onClick={() => onCancelEditMod(item.id)}>✕</button>
+                      </form>
+                    ) : (
+                      <>
+                        <span className="itm-mod-name">{mod.name}</span>
+                        <span className={`itm-mod-price${mod.price_adjustment > 0 ? ' positive' : mod.price_adjustment < 0 ? ' negative' : ''}`}>
+                          {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
+                        </span>
+                        <div className="itm-mod-actions">
+                          <button className="btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }}
+                            onClick={() => onStartEditMod(item, mod)}>Edit</button>
+                          <button className="btn-danger" style={{ padding: '3px 8px', fontSize: 11 }}
+                            onClick={() => onDeleteMod(item, mod)}>✕</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add new modifier — only when not editing an existing one */}
+          {!editingMod && (
+            <form className="itm-mod-inline-form itm-mod-add-form" onSubmit={(e) => onModSubmit(e, item)}>
+              <input className="itm-mod-edit-input"
+                value={modForm?.name || ''}
+                onChange={(e) => onModFormChange(item.id, 'name', e.target.value)}
+                placeholder="e.g. Extra Cheese" required />
+              <input className="itm-mod-edit-input itm-mod-price-input"
+                type="number" step="0.01"
+                value={modForm?.price_adjustment ?? '0'}
+                onChange={(e) => onModFormChange(item.id, 'price_adjustment', e.target.value)}
+                placeholder="0.00" />
+              <button type="submit" className="btn-primary" style={{ fontSize: 11, padding: '5px 12px' }}
+                disabled={modSubmitting}>+ Add</button>
+            </form>
+          )}
+        </div>
+      </div>
+
       <div className="itm-card-footer">
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
-          {unavailable ? '\u00a0' : (selected ? `${fmtUsd(item.price * qty)} selected` : '\u00a0')}
-        </span>
+        <button
+          className={`itm-mod-toggle-btn${modPanelOpen ? ' active' : ''}`}
+          onClick={onToggleModPanel}
+        >
+          {modPanelOpen ? 'Hide mods' : `Mods${mods.length > 0 ? ` (${mods.length})` : ''}`}
+        </button>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-ghost" style={{ padding: '5px 11px', fontSize: 11 }}
             onClick={() => onEdit(item)}>Edit</button>
@@ -140,13 +218,12 @@ export default function Items() {
   const [toast, setToast]               = useState(null);
   const [showUnavailable, setShowUnavailable] = useState(false);
 
-  /* Modifier state */
-  const [modifiers, setModifiers]         = useState([]);
-  const [modFormOpen, setModFormOpen]     = useState(false);
-  const [editingMod, setEditingMod]       = useState(null);
-  const [modForm, setModForm]             = useState(EMPTY_MOD_FORM);
-  const [modFormError, setModFormError]   = useState(null);
+  /* Modifier state — track which item has its modifier panel expanded */
+  const [expandedModItem, setExpandedModItem] = useState(null); // item id
+  const [modForms, setModForms]   = useState({}); // itemId -> { name, price_adjustment }
+  const [modErrors, setModErrors] = useState({}); // itemId -> string
   const [modSubmitting, setModSubmitting] = useState(false);
+  const [editingMod, setEditingMod] = useState(null); // { itemId, mod }
 
   /* ── Derived ── */
   const availableItems = items.filter((i) => i.available);
@@ -211,15 +288,6 @@ export default function Items() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  const loadModifiers = useCallback(async () => {
-    try {
-      const data = await api.getModifiers();
-      setModifiers(data || []);
-    } catch { /* non-fatal */ }
-  }, []);
-
-  useEffect(() => { loadModifiers(); }, [loadModifiers]);
 
   /* ── Quantity ── */
   const handleQty = (itemId, raw) => {
@@ -371,40 +439,55 @@ export default function Items() {
     onChange: (e) => setOrderForm((p) => ({ ...p, [key]: e.target.value })),
   });
 
-  /* ── Modifier CRUD ── */
-  const openCreateMod = () => {
-    setModForm(EMPTY_MOD_FORM); setEditingMod(null);
-    setModFormError(null); setModFormOpen(true);
+  /* ── Item-scoped modifier CRUD ── */
+  const toggleModPanel = (itemId) => {
+    setExpandedModItem((prev) => prev === itemId ? null : itemId);
+    setEditingMod(null);
+    setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
+    setModErrors((p) => ({ ...p, [itemId]: null }));
   };
-  const openEditMod = (mod) => {
-    setModForm({ name: mod.name, price_adjustment: String(mod.price_adjustment) });
-    setEditingMod(mod); setModFormError(null); setModFormOpen(true);
+
+  const startEditMod = (item, mod) => {
+    setEditingMod({ itemId: item.id, mod });
+    setModForms((p) => ({
+      ...p,
+      [item.id]: { name: mod.name, price_adjustment: String(mod.price_adjustment) },
+    }));
+    setModErrors((p) => ({ ...p, [item.id]: null }));
   };
-  const closeModForm = () => {
-    setModFormOpen(false); setEditingMod(null);
-    setModForm(EMPTY_MOD_FORM); setModFormError(null);
+
+  const cancelEditMod = (itemId) => {
+    setEditingMod(null);
+    setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
+    setModErrors((p) => ({ ...p, [itemId]: null }));
   };
-  const handleModSubmit = async (e) => {
+
+  const handleModSubmit = async (e, item) => {
     e.preventDefault();
-    setModSubmitting(true); setModFormError(null);
+    setModSubmitting(true);
+    setModErrors((p) => ({ ...p, [item.id]: null }));
+    const form = modForms[item.id] || EMPTY_MOD_FORM;
+    const payload = { name: form.name, price_adjustment: parseFloat(form.price_adjustment) || 0 };
     try {
-      const payload = { name: modForm.name, price_adjustment: parseFloat(modForm.price_adjustment) || 0 };
-      if (editingMod) {
-        await api.updateModifier(editingMod.id, payload);
+      if (editingMod && editingMod.itemId === item.id) {
+        await api.updateItemModifier(item.id, editingMod.mod.id, payload);
       } else {
-        await api.createModifier(payload);
+        await api.createItemModifier(item.id, payload);
       }
-      closeModForm(); loadModifiers();
+      setEditingMod(null);
+      setModForms((p) => ({ ...p, [item.id]: EMPTY_MOD_FORM }));
+      load(); // reload items so modifiers are refreshed inline
     } catch (err) {
-      setModFormError(err.message);
+      setModErrors((p) => ({ ...p, [item.id]: err.message }));
     } finally {
       setModSubmitting(false);
     }
   };
-  const handleDeleteMod = async (mod) => {
+
+  const handleDeleteMod = async (item, mod) => {
     try {
-      await api.deleteModifier(mod.id);
-      loadModifiers();
+      await api.deleteItemModifier(item.id, mod.id);
+      load();
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -691,6 +774,18 @@ export default function Items() {
                       onDelete={(i) => setDeleteTarget(i)}
                       onActivate={handleActivate}
                       delay={gi * 60 + ii * 40}
+                      modPanelOpen={expandedModItem === item.id}
+                      onToggleModPanel={() => toggleModPanel(item.id)}
+                      modForm={modForms[item.id] || EMPTY_MOD_FORM}
+                      onModFormChange={(itemId, key, val) =>
+                        setModForms((p) => ({ ...p, [itemId]: { ...(p[itemId] || EMPTY_MOD_FORM), [key]: val } }))}
+                      modError={modErrors[item.id]}
+                      modSubmitting={modSubmitting}
+                      editingMod={editingMod?.itemId === item.id ? editingMod : null}
+                      onStartEditMod={startEditMod}
+                      onCancelEditMod={cancelEditMod}
+                      onModSubmit={handleModSubmit}
+                      onDeleteMod={handleDeleteMod}
                     />
                   ))}
                 </div>
@@ -722,6 +817,18 @@ export default function Items() {
                         onDelete={(i) => setDeleteTarget(i)}
                         onActivate={handleActivate}
                         delay={ii * 40}
+                        modPanelOpen={expandedModItem === item.id}
+                        onToggleModPanel={() => toggleModPanel(item.id)}
+                        modForm={modForms[item.id] || EMPTY_MOD_FORM}
+                        onModFormChange={(itemId, key, val) =>
+                          setModForms((p) => ({ ...p, [itemId]: { ...(p[itemId] || EMPTY_MOD_FORM), [key]: val } }))}
+                        modError={modErrors[item.id]}
+                        modSubmitting={modSubmitting}
+                        editingMod={editingMod?.itemId === item.id ? editingMod : null}
+                        onStartEditMod={startEditMod}
+                        onCancelEditMod={cancelEditMod}
+                        onModSubmit={handleModSubmit}
+                        onDeleteMod={handleDeleteMod}
                       />
                     ))}
                   </div>
@@ -753,81 +860,6 @@ export default function Items() {
             )}
           </>
         )}
-
-        {/* ── Modifier Management Section ── */}
-        <div className="itm-mod-section">
-          <div className="itm-mod-head">
-            <h2 className="itm-mod-title">Item <em>Modifiers</em></h2>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {modFormOpen
-                ? <button className="btn-ghost" onClick={closeModForm}>✕ Cancel</button>
-                : <button className="btn-primary" onClick={openCreateMod}>+ Add Modifier</button>
-              }
-            </div>
-          </div>
-          <p className="itm-mod-desc">
-            Modifiers appear as selectable options when creating or editing an order.
-            Use positive values to add cost (e.g. +1.50) and negative to remove it (e.g. -0.50).
-          </p>
-
-          {/* Modifier slide-down form */}
-          <div className={`itm-mod-form-wrap ${modFormOpen ? 'open' : 'closed'}`}>
-            <form className="itm-mod-form" onSubmit={handleModSubmit}>
-              {modFormError && <div className="itm-form-error" style={{ marginBottom: 12 }}>{modFormError}</div>}
-              <div className="itm-form-body">
-                <div className="itm-field full">
-                  <label className="itm-label">Name *</label>
-                  <input
-                    className="itm-input"
-                    value={modForm.name}
-                    onChange={(e) => setModForm((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="e.g. Extra Cheese"
-                    required
-                  />
-                </div>
-                <div className="itm-field">
-                  <label className="itm-label">Price Adjustment ($)</label>
-                  <input
-                    className="itm-input"
-                    type="number"
-                    step="0.01"
-                    value={modForm.price_adjustment}
-                    onChange={(e) => setModForm((p) => ({ ...p, price_adjustment: e.target.value }))}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-              <div className="itm-form-actions">
-                <button type="submit" className="btn-primary" disabled={modSubmitting}>
-                  {modSubmitting ? 'Saving…' : editingMod ? 'Update modifier' : 'Create modifier'}
-                </button>
-                <button type="button" className="btn-ghost" onClick={closeModForm}>Cancel</button>
-              </div>
-            </form>
-          </div>
-
-          {/* Modifier list */}
-          {modifiers.length === 0 ? (
-            <div className="itm-mod-empty">No modifiers yet — add your first above.</div>
-          ) : (
-            <div className="itm-mod-list">
-              {modifiers.map((mod) => (
-                <div key={mod.id} className="itm-mod-row">
-                  <span className="itm-mod-name">{mod.name}</span>
-                  <span className={`itm-mod-price ${mod.price_adjustment > 0 ? 'positive' : mod.price_adjustment < 0 ? 'negative' : ''}`}>
-                    {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
-                  </span>
-                  <div className="itm-mod-actions">
-                    <button className="btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }}
-                      onClick={() => openEditMod(mod)}>Edit</button>
-                    <button className="btn-danger" style={{ padding: '4px 10px', fontSize: '11px' }}
-                      onClick={() => handleDeleteMod(mod)}>Delete</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
       </div>
     </>

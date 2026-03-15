@@ -72,11 +72,13 @@ func Migrate() error {
 		`ALTER TABLE orders ALTER COLUMN delivery_address DROP NOT NULL`,
 		`CREATE TABLE IF NOT EXISTS item_modifiers (
 			id SERIAL PRIMARY KEY,
+			item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
 			name VARCHAR(100) NOT NULL,
 			price_adjustment DECIMAL(10,2) NOT NULL DEFAULT 0,
 			created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'),
 			updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_item_modifiers_item_id ON item_modifiers(item_id)`,
 		`DROP TRIGGER IF EXISTS update_item_modifiers_updated_at ON item_modifiers`,
 		`CREATE TRIGGER update_item_modifiers_updated_at
 		BEFORE UPDATE ON item_modifiers
@@ -90,18 +92,6 @@ func Migrate() error {
 			price_adjustment DECIMAL(10,2) NOT NULL DEFAULT 0
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_order_item_modifiers_order_item_id ON order_item_modifiers(order_item_id)`,
-		`INSERT INTO item_modifiers (name, price_adjustment) VALUES
-			('Extra Cheese', 1.50),
-			('Extra Sauce', 0.50),
-			('No Onions', 0.00),
-			('No Garlic', 0.00),
-			('Light Sauce', 0.00),
-			('Mushrooms', 1.00),
-			('Pepperoni', 1.50),
-			('Gluten-Free', 2.00),
-			('Extra Spicy', 0.00),
-			('Less Spicy', 0.00)
-		ON CONFLICT DO NOTHING`,
 	}
 
 	for _, migration := range migrations {

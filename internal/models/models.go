@@ -13,14 +13,15 @@ type Customer struct {
 }
 
 type Item struct {
-	ID          int       `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Price       float64   `json:"price"`
-	Category    string    `json:"category"`
-	Available   bool      `json:"available"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          int            `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Price       float64        `json:"price"`
+	Category    string         `json:"category"`
+	Available   bool           `json:"available"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	Modifiers   []ItemModifier `json:"modifiers"`
 }
 
 type Order struct {
@@ -39,9 +40,10 @@ type Order struct {
 	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
-// ItemModifier is a reusable modifier that can be applied to any order item.
+// ItemModifier is a modifier that belongs to a specific menu item.
 type ItemModifier struct {
 	ID              int     `json:"id"`
+	ItemID          int     `json:"item_id"`
 	Name            string  `json:"name"`
 	PriceAdjustment float64 `json:"price_adjustment"`
 }
