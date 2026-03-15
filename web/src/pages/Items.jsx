@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
+import CustomerOrderHistory from '../components/CustomerOrderHistory';
 import '../index.css';
 
 /* ─── Constants ──────────────────────────── */
@@ -9,6 +10,25 @@ const EMPTY_ORDER_FORM = {
   customer_id: '', delivery_address: '', notes: '',
   payment_method: 'cash', scheduled_date: '',
 };
+const EMPTY_MOD_FORM = { name: '', price_adjustment: '0' };
+
+// groupOrderItems: identical item+modifier combos are merged into one line.
+// Same logic as Orders.jsx so summaries look consistent everywhere.
+function groupOrderItems(lines) {
+  const groups = [];
+  const seen = new Map();
+  for (const line of lines) {
+    const modKey = (line.modifiers || []).map((m) => m.id).sort().join(',');
+    const key = `${line.itemId}::${modKey}`;
+    if (seen.has(key)) {
+      groups[seen.get(key)].quantity += line.quantity;
+    } else {
+      seen.set(key, groups.length);
+      groups.push({ ...line });
+    }
+  }
+  return groups;
+}
 
 /* ─── Helpers ────────────────────────────── */
 
@@ -17,12 +37,6 @@ function fmtUsd(n) {
     style: 'currency', currency: 'USD',
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n ?? 0);
-}
-
-function fmtDate(iso) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
 }
 
 function localDatetimeToUtcIso(localStr) {
@@ -58,9 +72,20 @@ function ConfirmDialog({ title, body, onConfirm, onCancel }) {
 
 /* ─── ItemCard ───────────────────────────── */
 
-function ItemCard({ item, qty, onQtyChange, onEdit, onDelete, onActivate, delay }) {
+function ItemCard({
+  item, qty, onQtyChange, onEdit, onDelete, onActivate, delay,
+  modPanelOpen, onToggleModPanel,
+  modForm, onModFormChange,
+  modError, modSubmitting,
+  editingMod, onStartEditMod, onCancelEditMod,
+  onModSubmit, onDeleteMod,
+  // Order modifier selection (only active when qty > 0)
+  orderSelectedMods, onToggleOrderMod,
+}) {
   const selected = qty > 0;
   const unavailable = !item.available;
+  const mods = item.modifiers || [];
+
   return (
     <div
       className={`itm-card${selected ? ' selected' : ''}${unavailable ? ' unavailable' : ''}`}
@@ -77,24 +102,122 @@ function ItemCard({ item, qty, onQtyChange, onEdit, onDelete, onActivate, delay 
         {unavailable ? (
           <div className="itm-unavailable-badge">Unavailable</div>
         ) : (
-          <div className="itm-qty-row">
-            <button className="itm-qty-btn"
-              onClick={() => onQtyChange(item.id, qty - 1)}>−</button>
-            <input
-              className="itm-qty-input"
-              type="number" min="0"
-              value={qty}
-              onChange={(e) => onQtyChange(item.id, e.target.value)}
-            />
-            <button className="itm-qty-btn"
-              onClick={() => onQtyChange(item.id, qty + 1)}>+</button>
-          </div>
+          <>
+            <div className="itm-qty-row">
+              <button className="itm-qty-btn"
+                onClick={() => onQtyChange(item.id, qty - 1)}>−</button>
+              <input
+                className="itm-qty-input"
+                type="number" min="0"
+                value={qty}
+                onChange={(e) => onQtyChange(item.id, e.target.value)}
+              />
+              <button className="itm-qty-btn"
+                onClick={() => onQtyChange(item.id, qty + 1)}>+</button>
+            </div>
+
+            {/* Modifier selection for this order line — only shown when item is selected */}
+            {selected && mods.length > 0 && (
+              <div className="itm-order-mods">
+                <div className="itm-order-mods-label">Add to order:</div>
+                <div className="itm-order-mods-chips">
+                  {mods.map((mod) => {
+                    const active = (orderSelectedMods || []).some((m) => m.id === mod.id);
+                    return (
+                      <button
+                        key={mod.id}
+                        type="button"
+                        className={`itm-order-mod-chip${active ? ' active' : ''}`}
+                        onClick={() => onToggleOrderMod(item.id, mod)}
+                      >
+                        {mod.name}
+                        {mod.price_adjustment !== 0 && (
+                          <span className="itm-order-mod-adj">
+                            {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      {/* Per-item modifier panel */}
+      <div className={`itm-mod-panel ${modPanelOpen ? 'open' : 'closed'}`}>
+        <div className="itm-mod-panel-inner">
+          {modError && <div className="itm-form-error" style={{ marginBottom: 8, fontSize: 12 }}>{modError}</div>}
+
+          {mods.length > 0 && (
+            <div className="itm-mod-list">
+              {mods.map((mod) => {
+                const isEditing = editingMod?.mod?.id === mod.id;
+                return (
+                  <div key={mod.id} className="itm-mod-row">
+                    {isEditing ? (
+                      <form className="itm-mod-inline-form" onSubmit={(e) => onModSubmit(e, item)}>
+                        <input className="itm-mod-edit-input"
+                          value={modForm?.name || ''}
+                          onChange={(e) => onModFormChange(item.id, 'name', e.target.value)}
+                          placeholder="Name" required />
+                        <input className="itm-mod-edit-input itm-mod-price-input"
+                          type="number" step="0.01"
+                          value={modForm?.price_adjustment ?? '0'}
+                          onChange={(e) => onModFormChange(item.id, 'price_adjustment', e.target.value)} />
+                        <button type="submit" className="btn-ghost" style={{ fontSize: 11 }}
+                          disabled={modSubmitting}>Save</button>
+                        <button type="button" className="btn-ghost" style={{ fontSize: 11 }}
+                          onClick={() => onCancelEditMod(item.id)}>✕</button>
+                      </form>
+                    ) : (
+                      <>
+                        <span className="itm-mod-name">{mod.name}</span>
+                        <span className={`itm-mod-price${mod.price_adjustment > 0 ? ' positive' : mod.price_adjustment < 0 ? ' negative' : ''}`}>
+                          {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
+                        </span>
+                        <div className="itm-mod-actions">
+                          <button className="btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }}
+                            onClick={() => onStartEditMod(item, mod)}>Edit</button>
+                          <button className="btn-danger" style={{ padding: '3px 8px', fontSize: 11 }}
+                            onClick={() => onDeleteMod(item, mod)}>✕</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add new modifier — only when not editing an existing one */}
+          {!editingMod && (
+            <form className="itm-mod-inline-form itm-mod-add-form" onSubmit={(e) => onModSubmit(e, item)}>
+              <input className="itm-mod-edit-input"
+                value={modForm?.name || ''}
+                onChange={(e) => onModFormChange(item.id, 'name', e.target.value)}
+                placeholder="e.g. Extra Cheese" required />
+              <input className="itm-mod-edit-input itm-mod-price-input"
+                type="number" step="0.01"
+                value={modForm?.price_adjustment ?? '0'}
+                onChange={(e) => onModFormChange(item.id, 'price_adjustment', e.target.value)}
+                placeholder="0.00" />
+              <button type="submit" className="btn-primary" style={{ fontSize: 11, padding: '5px 12px' }}
+                disabled={modSubmitting}>+ Add</button>
+            </form>
+          )}
+        </div>
+      </div>
+
       <div className="itm-card-footer">
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
-          {unavailable ? '\u00a0' : (selected ? `${fmtUsd(item.price * qty)} selected` : '\u00a0')}
-        </span>
+        <button
+          className={`itm-mod-toggle-btn${modPanelOpen ? ' active' : ''}`}
+          onClick={onToggleModPanel}
+        >
+          {modPanelOpen ? 'Hide mods' : `Mods${mods.length > 0 ? ` (${mods.length})` : ''}`}
+        </button>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn-ghost" style={{ padding: '5px 11px', fontSize: 11 }}
             onClick={() => onEdit(item)}>Edit</button>
@@ -130,14 +253,21 @@ export default function Items() {
   const [orderForm, setOrderForm]           = useState(EMPTY_ORDER_FORM);
   const [orderFormError, setOrderFormError] = useState(null);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
-  const [orderHistory, setOrderHistory]     = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  // selectedModifiers[itemId] = array of modifier objects selected for that item's order line
+  const [selectedModifiers, setSelectedModifiers] = useState({});
 
   const [search, setSearch]             = useState('');
   const [catFilter, setCatFilter]       = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [toast, setToast]               = useState(null);
   const [showUnavailable, setShowUnavailable] = useState(false);
+
+  /* Modifier state — track which item has its modifier panel expanded */
+  const [expandedModItem, setExpandedModItem] = useState(null); // item id
+  const [modForms, setModForms]   = useState({}); // itemId -> { name, price_adjustment }
+  const [modErrors, setModErrors] = useState({}); // itemId -> string
+  const [modSubmitting, setModSubmitting] = useState(false);
+  const [editingMod, setEditingMod] = useState(null); // { itemId, mod }
 
   /* ── Derived ── */
   const availableItems = items.filter((i) => i.available);
@@ -161,10 +291,22 @@ export default function Items() {
   }, {});
 
   const selectedItems = availableItems.filter((i) => (quantities[i.id] || 0) > 0);
-  const totalAmount = selectedItems.reduce(
-    (sum, i) => sum + i.price * (quantities[i.id] || 0), 0
-  );
-  const totalQty = selectedItems.reduce((sum, i) => sum + (quantities[i.id] || 0), 0);
+
+  // Build line objects used for summary grouping and order submission
+  const orderLines = selectedItems.map((i) => ({
+    itemId:    i.id,
+    item_name: i.name,
+    item:      i,
+    quantity:  quantities[i.id] || 0,
+    modifiers: selectedModifiers[i.id] || [],
+  }));
+
+  const totalAmount = orderLines.reduce((sum, line) => {
+    const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+    return sum + (line.item.price + modAdj) * line.quantity;
+  }, 0);
+
+  const totalQty = orderLines.reduce((sum, l) => sum + l.quantity, 0);
 
   /* ── Helpers ── */
   const showToast = (message, type = 'success') => {
@@ -177,6 +319,19 @@ export default function Items() {
       const r = { ...prev };
       Object.keys(r).forEach((k) => (r[k] = 0));
       return r;
+    });
+    setSelectedModifiers({});
+  };
+
+  // Toggle a modifier for an item in the order selection
+  const toggleOrderModifier = (itemId, mod) => {
+    setSelectedModifiers((prev) => {
+      const current = prev[itemId] || [];
+      const has = current.some((m) => m.id === mod.id);
+      return {
+        ...prev,
+        [itemId]: has ? current.filter((m) => m.id !== mod.id) : [...current, mod],
+      };
     });
   };
 
@@ -203,10 +358,24 @@ export default function Items() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Open the order form automatically when items are selected, close when empty
+  useEffect(() => {
+    if (totalQty > 0 && !orderFormOpen) setOrderFormOpen(true);
+    if (totalQty === 0 && orderFormOpen) setOrderFormOpen(false);
+  }, [totalQty]);
+
   /* ── Quantity ── */
   const handleQty = (itemId, raw) => {
     const qty = Math.max(0, parseInt(raw) || 0);
     setQuantities((prev) => ({ ...prev, [itemId]: qty }));
+    // Clear modifier selection when item is removed from order
+    if (qty === 0) {
+      setSelectedModifiers((prev) => {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+    }
   };
 
   /* ── Item form ── */
@@ -226,7 +395,6 @@ export default function Items() {
     setEditingItem(item);
     setItemFormError(null);
     setItemFormOpen(true);
-    setOrderFormOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -287,18 +455,10 @@ export default function Items() {
   };
 
   /* ── Order form ── */
-  const openOrderForm = () => {
-    setOrderFormOpen(true);
-    setItemFormOpen(false);
-    setOrderFormError(null);
-    setOrderHistory([]);
-  };
-
   const closeOrderForm = () => {
     setOrderFormOpen(false);
     setOrderForm(EMPTY_ORDER_FORM);
     setOrderFormError(null);
-    setOrderHistory([]);
     resetQty();
   };
 
@@ -309,17 +469,6 @@ export default function Items() {
       customer_id: customerId,
       delivery_address: customer?.address || p.delivery_address,
     }));
-    setOrderHistory([]);
-    if (!customerId) return;
-    try {
-      setHistoryLoading(true);
-      const orders = await api.getOrdersByCustomer(customerId);
-      setOrderHistory(orders || []);
-    } catch {
-      setOrderHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
   };
 
   const handleOrderSubmit = async (e) => {
@@ -336,7 +485,15 @@ export default function Items() {
         notes: orderForm.notes,
         payment_method: orderForm.payment_method,
         scheduled_date: localDatetimeToUtcIso(orderForm.scheduled_date),
-        items: selectedItems.map((i) => ({ item_id: i.id, quantity: quantities[i.id] })),
+        items: orderLines.map((line) => ({
+          item_id:   line.itemId,
+          quantity:  line.quantity,
+          modifiers: line.modifiers.map((m) => ({
+            modifier_id:      m.id,
+            name:             m.name,
+            price_adjustment: m.price_adjustment,
+          })),
+        })),
       });
       showToast('Order placed successfully');
       closeOrderForm();
@@ -352,6 +509,60 @@ export default function Items() {
     value: orderForm[key],
     onChange: (e) => setOrderForm((p) => ({ ...p, [key]: e.target.value })),
   });
+
+  /* ── Item-scoped modifier CRUD ── */
+  const toggleModPanel = (itemId) => {
+    setExpandedModItem((prev) => prev === itemId ? null : itemId);
+    setEditingMod(null);
+    setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
+    setModErrors((p) => ({ ...p, [itemId]: null }));
+  };
+
+  const startEditMod = (item, mod) => {
+    setEditingMod({ itemId: item.id, mod });
+    setModForms((p) => ({
+      ...p,
+      [item.id]: { name: mod.name, price_adjustment: String(mod.price_adjustment) },
+    }));
+    setModErrors((p) => ({ ...p, [item.id]: null }));
+  };
+
+  const cancelEditMod = (itemId) => {
+    setEditingMod(null);
+    setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
+    setModErrors((p) => ({ ...p, [itemId]: null }));
+  };
+
+  const handleModSubmit = async (e, item) => {
+    e.preventDefault();
+    setModSubmitting(true);
+    setModErrors((p) => ({ ...p, [item.id]: null }));
+    const form = modForms[item.id] || EMPTY_MOD_FORM;
+    const payload = { name: form.name, price_adjustment: parseFloat(form.price_adjustment) || 0 };
+    try {
+      if (editingMod && editingMod.itemId === item.id) {
+        await api.updateItemModifier(item.id, editingMod.mod.id, payload);
+      } else {
+        await api.createItemModifier(item.id, payload);
+      }
+      setEditingMod(null);
+      setModForms((p) => ({ ...p, [item.id]: EMPTY_MOD_FORM }));
+      load(); // reload items so modifiers are refreshed inline
+    } catch (err) {
+      setModErrors((p) => ({ ...p, [item.id]: err.message }));
+    } finally {
+      setModSubmitting(false);
+    }
+  };
+
+  const handleDeleteMod = async (item, mod) => {
+    try {
+      await api.deleteItemModifier(item.id, mod.id);
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
 
   /* ── Render ── */
   return (
@@ -480,18 +691,28 @@ export default function Items() {
                 {/* Order summary */}
                 <div className="ord-summary">
                   <div className="ord-summary-title">Order summary</div>
-                  {selectedItems.length === 0
+                  {orderLines.length === 0
                     ? <div className="ord-summary-empty">Select items from the menu below</div>
                     : <>
-                        {selectedItems.map((item) => (
-                          <div key={item.id} className="ord-line">
-                            <span className="ord-line-name">{item.name}</span>
-                            <span className="ord-line-qty">×{quantities[item.id]}</span>
-                            <span className="ord-line-price">
-                              {fmtUsd(item.price * quantities[item.id])}
-                            </span>
-                          </div>
-                        ))}
+                        {groupOrderItems(orderLines).map((line, i) => {
+                          const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+                          return (
+                            <div key={i} className="ord-line">
+                              <div className="ord-line-body">
+                                <span className="ord-line-name">{line.item_name}</span>
+                                {line.modifiers.length > 0 && (
+                                  <span className="ord-line-mods">
+                                    {line.modifiers.map((m) => m.name).join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="ord-line-qty">×{line.quantity}</span>
+                              <span className="ord-line-price">
+                                {fmtUsd((line.item.price + modAdj) * line.quantity)}
+                              </span>
+                            </div>
+                          );
+                        })}
                         <div className="ord-total">
                           <span className="ord-total-label">Total</span>
                           <span className="ord-total-value">{fmtUsd(totalAmount)}</span>
@@ -502,39 +723,11 @@ export default function Items() {
 
                 {/* Customer order history */}
                 {orderForm.customer_id && (
-                  <div className="ord-history">
-                    <div className="ord-history-title">Order history</div>
-                    {historyLoading
-                      ? <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
-                          Loading…
-                        </div>
-                      : orderHistory.length === 0
-                        ? <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--rule)', fontStyle: 'italic' }}>
-                            No previous orders
-                          </div>
-                        : orderHistory.map((order) => (
-                            <div key={order.id} className="ord-hist-row">
-                              <div className="ord-hist-top">
-                                <span className="ord-hist-id">#{order.id}</span>
-                                <span className="ord-hist-date">{fmtDate(order.created_at)}</span>
-                              </div>
-                              <div className="ord-hist-items">
-                                {order.order_items?.length > 0 ? (
-                                  <div>
-                                    {order.order_items.map((i) => (
-                                      <div key={i.item_id}>{i.quantity}× {i.item_name}</div>
-                                    ))}
-                                  </div>
-                                ) : 'No items'}
-                              </div>
-                              <div className="ord-hist-footer">
-                                <span className="ord-hist-total">{fmtUsd(order.total_amount)}</span>
-                                <span className="ord-hist-status">{order.status}</span>
-                              </div>
-                            </div>
-                          ))
-                    }
-                  </div>
+                  <CustomerOrderHistory 
+                    customerId={parseInt(orderForm.customer_id)} 
+                    variant="ord"
+                    showTitle={true}
+                  />
                 )}
               </div>
             </div>
@@ -634,6 +827,20 @@ export default function Items() {
                       onDelete={(i) => setDeleteTarget(i)}
                       onActivate={handleActivate}
                       delay={gi * 60 + ii * 40}
+                      modPanelOpen={expandedModItem === item.id}
+                      onToggleModPanel={() => toggleModPanel(item.id)}
+                      modForm={modForms[item.id] || EMPTY_MOD_FORM}
+                      onModFormChange={(itemId, key, val) =>
+                        setModForms((p) => ({ ...p, [itemId]: { ...(p[itemId] || EMPTY_MOD_FORM), [key]: val } }))}
+                      modError={modErrors[item.id]}
+                      modSubmitting={modSubmitting}
+                      editingMod={editingMod?.itemId === item.id ? editingMod : null}
+                      onStartEditMod={startEditMod}
+                      onCancelEditMod={cancelEditMod}
+                      onModSubmit={handleModSubmit}
+                      onDeleteMod={handleDeleteMod}
+                      orderSelectedMods={selectedModifiers[item.id] || []}
+                      onToggleOrderMod={toggleOrderModifier}
                     />
                   ))}
                 </div>
@@ -665,6 +872,20 @@ export default function Items() {
                         onDelete={(i) => setDeleteTarget(i)}
                         onActivate={handleActivate}
                         delay={ii * 40}
+                        modPanelOpen={expandedModItem === item.id}
+                        onToggleModPanel={() => toggleModPanel(item.id)}
+                        modForm={modForms[item.id] || EMPTY_MOD_FORM}
+                        onModFormChange={(itemId, key, val) =>
+                          setModForms((p) => ({ ...p, [itemId]: { ...(p[itemId] || EMPTY_MOD_FORM), [key]: val } }))}
+                        modError={modErrors[item.id]}
+                        modSubmitting={modSubmitting}
+                        editingMod={editingMod?.itemId === item.id ? editingMod : null}
+                        onStartEditMod={startEditMod}
+                        onCancelEditMod={cancelEditMod}
+                        onModSubmit={handleModSubmit}
+                        onDeleteMod={handleDeleteMod}
+                        orderSelectedMods={[]}
+                        onToggleOrderMod={() => {}}
                       />
                     ))}
                   </div>
@@ -672,7 +893,7 @@ export default function Items() {
               </div>
             )}
 
-            {/* Sticky order bar — visible when items selected */}
+            {/* Sticky order bar — summary only; order form opens automatically */}
             {totalQty > 0 && (
               <div className="itm-order-bar">
                 <div className="itm-order-bar-left">
@@ -680,17 +901,23 @@ export default function Items() {
                     {totalQty} item{totalQty !== 1 ? 's' : ''} selected
                   </span>
                   <span className="itm-order-bar-items">
-                    {selectedItems.map((i) => `${quantities[i.id]}× ${i.name}`).join(' · ')}
+                    {groupOrderItems(orderLines).map((line, i) => {
+                      const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+                      const linePrice = (line.item.price + modAdj) * line.quantity;
+                      const modStr = line.modifiers.length > 0
+                        ? ` (${line.modifiers.map((m) => m.name).join(', ')})`
+                        : '';
+                      return (
+                        <span key={i} className="itm-order-bar-item">
+                          {line.quantity}× {line.item_name}{modStr} · {fmtUsd(linePrice)}
+                        </span>
+                      );
+                    })}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                   <span className="itm-order-bar-total">{fmtUsd(totalAmount)}</span>
-                  <div className="itm-order-bar-actions">
-                    <button className="itm-order-bar-clear" onClick={resetQty}>Clear</button>
-                    <button className="itm-order-bar-btn" onClick={openOrderForm}>
-                      Place Order →
-                    </button>
-                  </div>
+                  <button className="itm-order-bar-clear" onClick={resetQty}>Clear</button>
                 </div>
               </div>
             )}

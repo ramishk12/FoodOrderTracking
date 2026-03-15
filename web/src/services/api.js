@@ -54,4 +54,10 @@ export const api = {
   deleteOrder: (id) => request(`/orders/${id}`, { method: 'DELETE' }),
 
   getDashboardStats: () => request('/dashboard'),
+
+  // Item modifiers (item-scoped)
+  getItemModifiers: (itemId) => request(`/items/${itemId}/modifiers`),
+  createItemModifier: (itemId, data) => request(`/items/${itemId}/modifiers`, { method: 'POST', body: data }),
+  updateItemModifier: (itemId, modifierId, data) => request(`/items/${itemId}/modifiers/${modifierId}`, { method: 'PUT', body: data }),
+  deleteItemModifier: (itemId, modifierId) => request(`/items/${itemId}/modifiers/${modifierId}`, { method: 'DELETE' }),
 };

@@ -86,6 +86,7 @@ func populateOrderItems(orders []models.Order) error {
 
 	for rows.Next() {
 		var oi models.OrderItem
+		oi.Modifiers = make([]models.OrderItemModifier, 0)
 		if err := rows.Scan(&oi.ID, &oi.OrderID, &oi.ItemID, &oi.ItemName, &oi.Quantity, &oi.UnitPrice, &oi.Subtotal); err != nil {
 			log.Printf("Error scanning order item: %v", err)
 			continue
@@ -94,7 +95,55 @@ func populateOrderItems(orders []models.Order) error {
 			o.OrderItems = append(o.OrderItems, oi)
 		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Build a map of order_item_id -> *OrderItem so we can attach modifiers.
+	oiMap := make(map[int]*models.OrderItem)
+	var oiIDs []any
+	for _, orderPtr := range orderMap {
+		for j := range orderPtr.OrderItems {
+			oiMap[orderPtr.OrderItems[j].ID] = &orderPtr.OrderItems[j]
+			oiIDs = append(oiIDs, orderPtr.OrderItems[j].ID)
+		}
+	}
+
+	if len(oiIDs) > 0 {
+		ph := ""
+		for i := range oiIDs {
+			if i > 0 {
+				ph += ", "
+			}
+			ph += fmt.Sprintf("$%d", i+1)
+		}
+		modRows, err := database.DB.Query(fmt.Sprintf(`
+			SELECT id, order_item_id, COALESCE(modifier_id, 0), modifier_name, price_adjustment
+			FROM order_item_modifiers
+			WHERE order_item_id IN (%s)
+			ORDER BY id
+		`, ph), oiIDs...)
+		if err != nil {
+			log.Printf("Error querying order item modifiers: %v", err)
+			return nil
+		}
+		defer modRows.Close()
+		for modRows.Next() {
+			var oim models.OrderItemModifier
+			if err := modRows.Scan(&oim.ID, &oim.OrderItemID, &oim.ModifierID, &oim.ModifierName, &oim.PriceAdjustment); err != nil {
+				log.Printf("Error scanning order item modifier: %v", err)
+				continue
+			}
+			if oiPtr, ok := oiMap[oim.OrderItemID]; ok {
+				oiPtr.Modifiers = append(oiPtr.Modifiers, oim)
+			}
+		}
+		if err := modRows.Err(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // normalizeScheduledDate converts a scheduled date pointer to UTC in-place.
@@ -266,6 +315,13 @@ func GetOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, o)
 }
 
+// orderModifierInput is a modifier to be applied to a single order item line.
+type orderModifierInput struct {
+	ModifierID      int     `json:"modifier_id"` // 0 means ad-hoc (not from item_modifiers)
+	Name            string  `json:"name"`
+	PriceAdjustment float64 `json:"price_adjustment"`
+}
+
 // createOrderInput is the expected request body for creating an order.
 type createOrderInput struct {
 	CustomerID      int        `json:"customer_id"`
@@ -275,8 +331,9 @@ type createOrderInput struct {
 	PaymentMethod   string     `json:"payment_method"`
 	ScheduledDate   *time.Time `json:"scheduled_date"`
 	Items           []struct {
-		ItemID   int `json:"item_id"`
-		Quantity int `json:"quantity"`
+		ItemID    int                  `json:"item_id"`
+		Quantity  int                  `json:"quantity"`
+		Modifiers []orderModifierInput `json:"modifiers"`
 	} `json:"items"`
 }
 
@@ -290,8 +347,9 @@ type updateOrderInput struct {
 	PaymentMethod   string     `json:"payment_method"`
 	ScheduledDate   *time.Time `json:"scheduled_date"`
 	Items           []struct {
-		ItemID   int `json:"item_id"`
-		Quantity int `json:"quantity"`
+		ItemID    int                  `json:"item_id"`
+		Quantity  int                  `json:"quantity"`
+		Modifiers []orderModifierInput `json:"modifiers"`
 	} `json:"items"`
 }
 
@@ -331,7 +389,7 @@ func CreateOrder(c *gin.Context) {
 	}
 	defer tx.Rollback()
 
-	// Validate items and compute total.
+	// Validate items, fetch prices, and compute total (including modifier adjustments).
 	var totalAmount float64
 	itemPrices := make(map[int]float64, len(input.Items))
 	for _, item := range input.Items {
@@ -339,13 +397,19 @@ func CreateOrder(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Quantity must be greater than 0"})
 			return
 		}
-		var price float64
-		if err := tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&price); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid item ID: %d", item.ItemID)})
-			return
+		if _, seen := itemPrices[item.ItemID]; !seen {
+			var price float64
+			if err := tx.QueryRow("SELECT price FROM items WHERE id = $1", item.ItemID).Scan(&price); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid item ID: %d", item.ItemID)})
+				return
+			}
+			itemPrices[item.ItemID] = price
 		}
-		itemPrices[item.ItemID] = price
-		totalAmount += price * float64(item.Quantity)
+		modTotal := 0.0
+		for _, mod := range item.Modifiers {
+			modTotal += mod.PriceAdjustment
+		}
+		totalAmount += (itemPrices[item.ItemID] + modTotal) * float64(item.Quantity)
 	}
 
 	var orderID int
@@ -363,13 +427,33 @@ func CreateOrder(c *gin.Context) {
 
 	for _, item := range input.Items {
 		price := itemPrices[item.ItemID]
-		_, err = tx.Exec(`
+		modTotal := 0.0
+		for _, mod := range item.Modifiers {
+			modTotal += mod.PriceAdjustment
+		}
+		subtotal := (price + modTotal) * float64(item.Quantity)
+
+		var oiID int
+		if err = tx.QueryRow(`
 			INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal)
-			VALUES ($1, $2, $3, $4, $5)
-		`, orderID, item.ItemID, item.Quantity, price, price*float64(item.Quantity))
-		if err != nil {
+			VALUES ($1, $2, $3, $4, $5) RETURNING id
+		`, orderID, item.ItemID, item.Quantity, price, subtotal).Scan(&oiID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+
+		for _, mod := range item.Modifiers {
+			var modID interface{}
+			if mod.ModifierID > 0 {
+				modID = mod.ModifierID
+			}
+			if _, err = tx.Exec(`
+				INSERT INTO order_item_modifiers (order_item_id, modifier_id, modifier_name, price_adjustment)
+				VALUES ($1, $2, $3, $4)
+			`, oiID, modID, mod.Name, mod.PriceAdjustment); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 		}
 	}
 
@@ -449,13 +533,33 @@ func UpdateOrder(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid item ID: %d", item.ItemID)})
 				return
 			}
-			_, err = tx.Exec(`
+			modTotal := 0.0
+			for _, mod := range item.Modifiers {
+				modTotal += mod.PriceAdjustment
+			}
+			subtotal := (unitPrice + modTotal) * float64(item.Quantity)
+
+			var oiID int
+			if err = tx.QueryRow(`
 				INSERT INTO order_items (order_id, item_id, quantity, unit_price, subtotal)
-				VALUES ($1, $2, $3, $4, $5)
-			`, id, item.ItemID, item.Quantity, unitPrice, unitPrice*float64(item.Quantity))
-			if err != nil {
+				VALUES ($1, $2, $3, $4, $5) RETURNING id
+			`, id, item.ItemID, item.Quantity, unitPrice, subtotal).Scan(&oiID); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
+			}
+
+			for _, mod := range item.Modifiers {
+				var modID interface{}
+				if mod.ModifierID > 0 {
+					modID = mod.ModifierID
+				}
+				if _, err = tx.Exec(`
+					INSERT INTO order_item_modifiers (order_item_id, modifier_id, modifier_name, price_adjustment)
+					VALUES ($1, $2, $3, $4)
+				`, oiID, modID, mod.Name, mod.PriceAdjustment); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
 			}
 		}
 	}

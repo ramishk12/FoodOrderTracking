@@ -4,9 +4,9 @@ import { api } from '../services/api';
 import '../index.css';
 
 /* ─── Status config ──────────────────────── */
-
+ 
 const STATUSES = ['pending', 'preparing', 'ready', 'delivered', 'cancelled'];
-
+ 
 const STATUS_CONFIG = {
   pending:   { label: 'Pending',   color: '#b45309', bg: '#fef3c7', border: '#fde68a' },
   preparing: { label: 'Preparing', color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
@@ -14,18 +14,48 @@ const STATUS_CONFIG = {
   delivered: { label: 'Delivered', color: '#065f46', bg: '#ecfdf5', border: '#a7f3d0' },
   cancelled: { label: 'Cancelled', color: '#991b1b', bg: '#fff1f2', border: '#fecdd3' },
 };
-
+ 
 const DEFAULT_EXPANDED = { pending: true, preparing: true, ready: true, delivered: false, cancelled: false };
-
+ 
 /* ─── Helpers ────────────────────────────── */
-
+ 
 function fmtUsd(n) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency', currency: 'USD',
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n ?? 0);
 }
-
+ 
+// groupOrderItems collapses order item lines that share the same item and
+// identical modifier set into a single line with a summed quantity.
+// Lines with different modifiers (even on the same item) stay separate.
+function groupOrderItems(orderItems) {
+  const groups = [];
+  const seen = new Map(); // key -> index in groups
+ 
+  for (const oi of orderItems) {
+    // Build a stable key: item_id + sorted modifier ids
+    const modKey = (oi.modifiers || [])
+      .map((m) => m.modifier_id ?? m.modifier_name)
+      .sort()
+      .join(',');
+    const key = `${oi.item_id}::${modKey}`;
+ 
+    if (seen.has(key)) {
+      groups[seen.get(key)].quantity += oi.quantity;
+    } else {
+      seen.set(key, groups.length);
+      groups.push({
+        item_id:   oi.item_id,
+        item_name: oi.item_name,
+        quantity:  oi.quantity,
+        modifiers: oi.modifiers || [],
+      });
+    }
+  }
+  return groups;
+}
+ 
 function fmtDateTime(iso) {
   if (!iso) return null;
   return new Date(iso).toLocaleString('en-US', {
@@ -33,9 +63,9 @@ function fmtDateTime(iso) {
     hour: 'numeric', minute: '2-digit',
   });
 }
-
+ 
 /* ─── StatusPill ─────────────────────────── */
-
+ 
 function StatusPill({ status }) {
   const cfg = STATUS_CONFIG[status] ?? { label: status, color: '#666', bg: '#f3f4f6', border: '#e5e7eb' };
   return (
@@ -47,9 +77,9 @@ function StatusPill({ status }) {
     </span>
   );
 }
-
+ 
 /* ─── ConfirmDialog ──────────────────────── */
-
+ 
 function ConfirmDialog({ orderId, onConfirm, onCancel }) {
   return (
     <div className="ord-overlay" onClick={onCancel}>
@@ -68,9 +98,9 @@ function ConfirmDialog({ orderId, onConfirm, onCancel }) {
     </div>
   );
 }
-
+ 
 /* ─── OrderCard ──────────────────────────── */
-
+ 
 function OrderCard({ order, onStatusChange, onDelete, delay }) {
   return (
     <div className="ord-card" style={{ animationDelay: `${delay}ms` }}>
@@ -78,12 +108,12 @@ function OrderCard({ order, onStatusChange, onDelete, delay }) {
         <span className="ord-card-id">Order #{order.id}</span>
         <StatusPill status={order.status} />
       </div>
-
+ 
       <div className="ord-card-body">
         <div className={`ord-customer${!order.customer_name ? ' anonymous' : ''}`}>
           {order.customer_name || 'No customer'}
         </div>
-
+ 
         {[
           { label: 'Phone',   value: order.customer_phone },
           { label: 'Address', value: order.delivery_address },
@@ -95,22 +125,29 @@ function OrderCard({ order, onStatusChange, onDelete, delay }) {
             <span className="ord-detail-value">{value}</span>
           </div>
         ) : null)}
-
-        {/* Items */}
+ 
+        {/* Items — sort by item name and group by item+modifiers */}
         {order.order_items?.length > 0 && (
           <div className="ord-detail" style={{ alignItems: 'flex-start' }}>
             <span className="ord-detail-label">Items</span>
             <div className="ord-items">
-              {order.order_items.map((item, i) => (
-                <div key={item.item_id ?? i} className="ord-item-row">
-                  <span className="ord-item-qty">{item.quantity}×</span>
-                  <span>{item.item_name}</span>
+              {groupOrderItems(order.order_items).sort((a, b) => (a.item_name || '').localeCompare(b.item_name || '')).map((line, i) => (
+                <div key={i} className="ord-item-row">
+                  <span className="ord-item-qty">{line.quantity}×</span>
+                  <div className="ord-item-body">
+                    <span className="ord-item-name">{line.item_name}</span>
+                    {line.modifiers?.length > 0 && (
+                      <span className="ord-item-mods">
+                        {line.modifiers.map((m) => m.modifier_name).join(', ')}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
-
+ 
         {/* Timestamps */}
         {order.scheduled_date && (
           <div className="ord-detail">
@@ -128,13 +165,13 @@ function OrderCard({ order, onStatusChange, onDelete, delay }) {
             <span className="ord-detail-value">{fmtDateTime(order.updated_at)}</span>
           </div>
         )}
-
+ 
         <div className="ord-total">
           <span className="ord-total-label">Total</span>
           <span className="ord-total-value">{fmtUsd(order.total_amount)}</span>
         </div>
       </div>
-
+ 
       <div className="ord-card-footer">
         <Link to={`/orders/${order.id}/edit`} className="btn-primary">Edit</Link>
         <select
@@ -151,9 +188,9 @@ function OrderCard({ order, onStatusChange, onDelete, delay }) {
     </div>
   );
 }
-
+ 
 /* ─── StatusSection ──────────────────────── */
-
+ 
 function StatusSection({ status, orders, expanded, onToggle, onStatusChange, onDelete }) {
   const cfg = STATUS_CONFIG[status];
   return (
@@ -168,7 +205,7 @@ function StatusSection({ status, orders, expanded, onToggle, onStatusChange, onD
         <span className="ord-section-label" style={{ color: cfg.color }}>{cfg.label}</span>
         <span className="ord-section-count">{orders.length}</span>
       </button>
-
+ 
       {expanded && (
         <div className="ord-section-body">
           {orders.length === 0 ? (
@@ -191,9 +228,9 @@ function StatusSection({ status, orders, expanded, onToggle, onStatusChange, onD
     </div>
   );
 }
-
+ 
 /* ─── Orders ─────────────────────────────── */
-
+ 
 export default function Orders() {
   const [orders, setOrders]     = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -204,7 +241,7 @@ export default function Orders() {
   const [expanded, setExpanded] = useState(DEFAULT_EXPANDED);
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [toast, setToast]       = useState(null);
-
+ 
   /* ── Load ── */
   const load = useCallback(async () => {
     try {
@@ -217,15 +254,15 @@ export default function Orders() {
       setLoading(false);
     }
   }, []);
-
+ 
   useEffect(() => { load(); }, [load]);
-
+ 
   /* ── Toast ── */
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
-
+ 
   /* ── Status change ── */
   const handleStatusChange = async (order, newStatus) => {
     try {
@@ -233,9 +270,10 @@ export default function Orders() {
         customer_id:      order.customer_id,
         delivery_address: order.delivery_address,
         status:           newStatus,
-        payment_method:  order.payment_method,
+											  
         total_amount:     order.total_amount,
         notes:            order.notes,
+        payment_method:   order.payment_method,
         scheduled_date:   order.scheduled_date,
       });
       load();
@@ -243,7 +281,7 @@ export default function Orders() {
       showToast(err.message, 'error');
     }
   };
-
+ 
   /* ── Delete ── */
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -257,7 +295,7 @@ export default function Orders() {
       showToast(err.message, 'error');
     }
   };
-
+ 
   /* ── Filter ── */
   const filtered = orders.filter((o) => {
     const s = search.toLowerCase();
@@ -266,25 +304,25 @@ export default function Orders() {
     const matchPayment = !paymentFilter || o.payment_method  === paymentFilter;
     return matchSearch && matchStatus && matchPayment;
   });
-
+ 
   const grouped = Object.fromEntries(
     STATUSES.map((s) => [s, filtered.filter((o) => o.status === s)])
   );
-
+ 
   const visibleStatuses = statusFilter ? [statusFilter] : STATUSES;
-
+ 
   /* ── Expand / collapse ── */
   const toggleSection  = (s) => setExpanded((p) => ({ ...p, [s]: !p[s] }));
   const expandAll      = () => setExpanded(Object.fromEntries(STATUSES.map((s) => [s, true])));
   const collapseAll    = () => setExpanded(Object.fromEntries(STATUSES.map((s) => [s, false])));
-
+ 
   /* ── Render ── */
   return (
     <>
       <div className="ord-root">
-
+ 
         {toast && <div className={`ord-toast ${toast.type}`}>{toast.msg}</div>}
-
+ 
         {deleteTarget && (
           <ConfirmDialog
             orderId={deleteTarget.id}
@@ -292,7 +330,7 @@ export default function Orders() {
             onCancel={() => setDeleteTarget(null)}
           />
         )}
-
+ 
         {/* Header */}
         <div className="ord-header">
           <div>
@@ -303,21 +341,21 @@ export default function Orders() {
             </div>
           </div>
         </div>
-
+ 
         {loading && (
           <div className="ord-load">
             <div className="ord-spinner" />
             <span className="ord-load-text">Loading orders…</span>
           </div>
         )}
-
+ 
         {!loading && error && (
           <div className="ord-error">
             <p className="ord-error-msg">{error}</p>
             <button className="ord-retry" onClick={load}>Try again</button>
           </div>
         )}
-
+ 
         {!loading && !error && (
           <>
             {/* Filters */}
@@ -346,13 +384,13 @@ export default function Orders() {
                 <option value="e-transfer">e-Transfer</option>
               </select>
             </div>
-
+ 
             {/* Section controls */}
             <div className="ord-controls">
               <button className="btn-ghost" onClick={expandAll}>Expand all</button>
               <button className="btn-ghost" onClick={collapseAll}>Collapse all</button>
             </div>
-
+ 
             {/* Empty state */}
             {orders.length === 0 && (
               <div className="ord-empty">
@@ -361,14 +399,14 @@ export default function Orders() {
                 <div className="ord-empty-sub">Orders placed from the Menu page will appear here.</div>
               </div>
             )}
-
+ 
             {orders.length > 0 && filtered.length === 0 && (
               <div className="ord-empty">
                 <div className="ord-empty-title">No results</div>
                 <div className="ord-empty-sub">Try adjusting your filters.</div>
               </div>
             )}
-
+ 
             {/* Status sections */}
             {filtered.length > 0 && visibleStatuses.map((status) => (
               <StatusSection
@@ -383,14 +421,14 @@ export default function Orders() {
             ))}
           </>
         )}
-
+ 
       </div>
     </>
   );
 }
-
+ 
 /* ─── Icons ──────────────────────────────── */
-
+ 
 function ChevronIcon({ open }) {
   return (
     <svg className={`ord-section-chevron${open ? ' open' : ''}`}
@@ -400,7 +438,7 @@ function ChevronIcon({ open }) {
     </svg>
   );
 }
-
+ 
 function SearchIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
