@@ -358,10 +358,11 @@ export default function Items() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Open the order form automatically when the first item is selected
+  // Open the order form automatically when items are selected, close when empty
   useEffect(() => {
     if (totalQty > 0 && !orderFormOpen) setOrderFormOpen(true);
-  }, [totalQty]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (totalQty === 0 && orderFormOpen) setOrderFormOpen(false);
+  }, [totalQty]);
 
   /* ── Quantity ── */
   const handleQty = (itemId, raw) => {
