@@ -467,9 +467,23 @@ export default function OrderEdit() {
                   <p className="oe-no-items">No items selected — add from the menu below.</p>
                 ) : (
                   <div className="oe-items-list">
-                    {lineItems.map((line) => {
-                      const item = items.find((i) => i.id === line.itemId);
-                      if (!item) return null;
+                    {lineItems
+                      .map((line, idx) => {
+                        const item = items.find((i) => i.id === line.itemId);
+                        if (!item) return null;
+                        return { ...line, item, idx };
+                      })
+                      .filter(Boolean)
+                      .sort((a, b) => {
+                        const nameA = a.item?.name || '';
+                        const nameB = b.item?.name || '';
+                        if (nameA !== nameB) return nameA.localeCompare(nameB);
+                        const modsA = a.modifiers.map((m) => m.name).sort().join(',');
+                        const modsB = b.modifiers.map((m) => m.name).sort().join(',');
+                        return modsA.localeCompare(modsB);
+                      })
+                      .map((line) => {
+                      const item = line.item;
                       const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
                       const lineTotal = (item.price + modAdj) * line.quantity;
                       const isPickerOpen = openModPicker === line.lineId;
