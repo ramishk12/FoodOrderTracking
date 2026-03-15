@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import CustomerOrderHistory from '../components/CustomerOrderHistory';
 import '../index.css';
@@ -11,24 +11,6 @@ const EMPTY_ORDER_FORM = {
   payment_method: 'cash', scheduled_date: '',
 };
 const EMPTY_MOD_FORM = { name: '', price_adjustment: '0' };
-
-// groupOrderItems: identical item+modifier combos are merged into one line.
-// Same logic as Orders.jsx so summaries look consistent everywhere.
-function groupOrderItems(lines) {
-  const groups = [];
-  const seen = new Map();
-  for (const line of lines) {
-    const modKey = (line.modifiers || []).map((m) => m.id).sort().join(',');
-    const key = `${line.itemId}::${modKey}`;
-    if (seen.has(key)) {
-      groups[seen.get(key)].quantity += line.quantity;
-    } else {
-      seen.set(key, groups.length);
-      groups.push({ ...line });
-    }
-  }
-  return groups;
-}
 
 /* ─── Helpers ────────────────────────────── */
 
@@ -51,7 +33,7 @@ function Toast({ message, type }) {
   return <div className={`itm-toast ${type}`}>{message}</div>;
 }
 
-/* ─── ConfirmDialog ──────────────────────── */
+/* ─── ConfirmDialog ──────────────────────────────── */
 
 function ConfirmDialog({ title, body, onConfirm, onCancel }) {
   return (
@@ -79,17 +61,13 @@ function ItemCard({
   modError, modSubmitting,
   editingMod, onStartEditMod, onCancelEditMod,
   onModSubmit, onDeleteMod,
-  // Order modifier selection (only active when qty > 0)
-  orderSelectedMods, onToggleOrderMod,
 }) {
-  const selected = qty > 0;
   const unavailable = !item.available;
-  const mods = item.modifiers || [];
 
   return (
     <div
-      className={`itm-card${selected ? ' selected' : ''}${unavailable ? ' unavailable' : ''}`}
-      style={{ animationDelay: `${delay}ms` }}
+      className={`itm-card${qty > 0 ? ' selected' : ''}${unavailable ? ' unavailable' : ''}`}
+      style={{ animationDelay: `${delay * 50}ms` }}
     >
       <div className="itm-card-body">
         <div className="itm-card-top">
@@ -115,159 +93,152 @@ function ItemCard({
               <button className="itm-qty-btn"
                 onClick={() => onQtyChange(item.id, qty + 1)}>+</button>
             </div>
-
-            {/* Modifier selection for this order line — only shown when item is selected */}
-            {selected && mods.length > 0 && (
-              <div className="itm-order-mods">
-                <div className="itm-order-mods-label">Add to order:</div>
-                <div className="itm-order-mods-chips">
-                  {mods.map((mod) => {
-                    const active = (orderSelectedMods || []).some((m) => m.id === mod.id);
-                    return (
-                      <button
-                        key={mod.id}
-                        type="button"
-                        className={`itm-order-mod-chip${active ? ' active' : ''}`}
-                        onClick={() => onToggleOrderMod(item.id, mod)}
-                      >
-                        {mod.name}
-                        {mod.price_adjustment !== 0 && (
-                          <span className="itm-order-mod-adj">
-                            {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>
 
-      {/* Per-item modifier panel */}
-      <div className={`itm-mod-panel ${modPanelOpen ? 'open' : 'closed'}`}>
-        <div className="itm-mod-panel-inner">
-          {modError && <div className="itm-form-error" style={{ marginBottom: 8, fontSize: 12 }}>{modError}</div>}
+      {unavailable ? (
+        <div className="itm-card-footer">
+          <button className="itm-activate-btn" onClick={() => onActivate(item)}>
+            Make Available
+          </button>
+          <div className="itm-card-actions">
+            <button className="itm-action-btn" onClick={() => onEdit(item)}>Edit</button>
+            <button className="itm-action-btn" onClick={() => onDelete(item)}>Delete</button>
+          </div>
+        </div>
+      ) : (
+        <div className="itm-card-footer">
+          <div className="itm-card-actions">
+            <button className="itm-action-btn" onClick={() => onEdit(item)}>Edit</button>
+            <button className="itm-action-btn" onClick={() => onDelete(item)}>Delete</button>
+          </div>
+          <button
+            className={`itm-mod-toggle-btn${modPanelOpen ? ' active' : ''}`}
+            onClick={onToggleModPanel}
+          >
+            Mods ({item.modifiers?.length || 0})
+          </button>
+        </div>
+      )}
 
-          {mods.length > 0 && (
-            <div className="itm-mod-list">
-              {mods.map((mod) => {
-                const isEditing = editingMod?.mod?.id === mod.id;
-                return (
+      {modPanelOpen && (
+        <div className="itm-mod-panel">
+          <div className="itm-mod-panel-inner">
+            <div className="itm-mod-header">
+              <span className="itm-mod-title">Modifiers for <em>{item.name}</em></span>
+              <button className="itm-mod-close" onClick={onToggleModPanel}>✕</button>
+            </div>
+
+            {item.modifiers?.length > 0 ? (
+              <div className="itm-mod-list">
+                {item.modifiers.map((mod) => (
                   <div key={mod.id} className="itm-mod-row">
-                    {isEditing ? (
-                      <form className="itm-mod-inline-form" onSubmit={(e) => onModSubmit(e, item)}>
-                        <input className="itm-mod-edit-input"
-                          value={modForm?.name || ''}
-                          onChange={(e) => onModFormChange(item.id, 'name', e.target.value)}
-                          placeholder="Name" required />
-                        <input className="itm-mod-edit-input itm-mod-price-input"
-                          type="number" step="0.01"
-                          value={modForm?.price_adjustment ?? '0'}
-                          onChange={(e) => onModFormChange(item.id, 'price_adjustment', e.target.value)} />
-                        <button type="submit" className="btn-ghost" style={{ fontSize: 11 }}
-                          disabled={modSubmitting}>Save</button>
-                        <button type="button" className="btn-ghost" style={{ fontSize: 11 }}
-                          onClick={() => onCancelEditMod(item.id)}>✕</button>
-                      </form>
+                    {editingMod?.id === mod.id ? (
+                      <div className="itm-mod-edit-form">
+                        <input
+                          className="itm-mod-edit-input"
+                          value={editingMod.name}
+                          onChange={(e) => onModFormChange({ ...editingMod, name: e.target.value })}
+                        />
+                        <input
+                          className="itm-mod-price-input"
+                          type="number"
+                          step="0.01"
+                          value={editingMod.price_adjustment}
+                          onChange={(e) => onModFormChange({ ...editingMod, price_adjustment: parseFloat(e.target.value) || 0 })}
+                        />
+                        <button className="btn-primary" onClick={() => onModSubmit(item.id)} disabled={modSubmitting}>
+                          Save
+                        </button>
+                        <button className="btn-ghost" onClick={onCancelEditMod}>Cancel</button>
+                      </div>
                     ) : (
                       <>
                         <span className="itm-mod-name">{mod.name}</span>
                         <span className={`itm-mod-price${mod.price_adjustment > 0 ? ' positive' : mod.price_adjustment < 0 ? ' negative' : ''}`}>
-                          {mod.price_adjustment > 0 ? '+' : ''}{mod.price_adjustment.toFixed(2)}
+                          {mod.price_adjustment > 0 ? '+' : ''}{fmtUsd(mod.price_adjustment)}
                         </span>
                         <div className="itm-mod-actions">
-                          <button className="btn-ghost" style={{ padding: '3px 8px', fontSize: 11 }}
-                            onClick={() => onStartEditMod(item, mod)}>Edit</button>
-                          <button className="btn-danger" style={{ padding: '3px 8px', fontSize: 11 }}
-                            onClick={() => onDeleteMod(item, mod)}>✕</button>
+                          <button className="itm-mod-edit" onClick={() => onStartEditMod(mod)}>Edit</button>
+                          <button className="itm-mod-delete" onClick={() => onDeleteMod(item.id, mod)}>Delete</button>
                         </div>
                       </>
                     )}
                   </div>
-                );
-              })}
+                ))}
+              </div>
+            ) : (
+              <div className="itm-mod-empty">No modifiers yet</div>
+            )}
+
+            <div className="itm-mod-add-form">
+              <div className="itm-mod-add-title">Add new modifier</div>
+              {modError && <div className="itm-mod-error">{modError}</div>}
+              <div className="itm-mod-add-inputs">
+                <input
+                  className="itm-mod-name-input"
+                  placeholder="Name (e.g., Extra Cheese)"
+                  value={modForm.name}
+                  onChange={(e) => onModFormChange({ ...modForm, name: e.target.value })}
+                />
+                <input
+                  className="itm-mod-price-input"
+                  type="number"
+                  step="0.01"
+                  placeholder="+$0.00"
+                  value={modForm.price_adjustment}
+                  onChange={(e) => onModFormChange({ ...modForm, price_adjustment: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <button className="btn-primary" onClick={() => onModSubmit(item.id)} disabled={modSubmitting}>
+                {modSubmitting ? 'Adding...' : 'Add Modifier'}
+              </button>
             </div>
-          )}
-
-          {/* Add new modifier — only when not editing an existing one */}
-          {!editingMod && (
-            <form className="itm-mod-inline-form itm-mod-add-form" onSubmit={(e) => onModSubmit(e, item)}>
-              <input className="itm-mod-edit-input"
-                value={modForm?.name || ''}
-                onChange={(e) => onModFormChange(item.id, 'name', e.target.value)}
-                placeholder="e.g. Extra Cheese" required />
-              <input className="itm-mod-edit-input itm-mod-price-input"
-                type="number" step="0.01"
-                value={modForm?.price_adjustment ?? '0'}
-                onChange={(e) => onModFormChange(item.id, 'price_adjustment', e.target.value)}
-                placeholder="0.00" />
-              <button type="submit" className="btn-primary" style={{ fontSize: 11, padding: '5px 12px' }}
-                disabled={modSubmitting}>+ Add</button>
-            </form>
-          )}
+          </div>
         </div>
-      </div>
-
-      <div className="itm-card-footer">
-        <button
-          className={`itm-mod-toggle-btn${modPanelOpen ? ' active' : ''}`}
-          onClick={onToggleModPanel}
-        >
-          {modPanelOpen ? 'Hide mods' : `Mods${mods.length > 0 ? ` (${mods.length})` : ''}`}
-        </button>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-ghost" style={{ padding: '5px 11px', fontSize: 11 }}
-            onClick={() => onEdit(item)}>Edit</button>
-          {unavailable ? (
-            <button className="btn-primary" style={{ background: 'var(--green)' }} onClick={() => onActivate(item)}>
-              Activate
-            </button>
-          ) : (
-            <button className="btn-danger" onClick={() => onDelete(item)}>Delete</button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-/* ─── Items ──────────────────────────────── */
+/* ─── Main Component ───────────────────────── */
 
 export default function Items() {
-  const [items, setItems]         = useState([]);
+  const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
-  const [quantities, setQuantities] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [itemFormOpen, setItemFormOpen]   = useState(false);
-  const [editingItem, setEditingItem]     = useState(null);
-  const [itemForm, setItemForm]           = useState(EMPTY_ITEM_FORM);
+  // Item form state
+  const [itemFormOpen, setItemFormOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemForm, setItemForm] = useState(EMPTY_ITEM_FORM);
   const [itemFormError, setItemFormError] = useState(null);
   const [itemSubmitting, setItemSubmitting] = useState(false);
 
-  const [orderFormOpen, setOrderFormOpen]   = useState(false);
-  const [orderForm, setOrderForm]           = useState(EMPTY_ORDER_FORM);
+  // Order form state
+  const [orderFormOpen, setOrderFormOpen] = useState(false);
+  const [orderForm, setOrderForm] = useState(EMPTY_ORDER_FORM);
   const [orderFormError, setOrderFormError] = useState(null);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
-  // selectedModifiers[itemId] = array of modifier objects selected for that item's order line
-  const [selectedModifiers, setSelectedModifiers] = useState({});
 
-  const [search, setSearch]             = useState('');
-  const [catFilter, setCatFilter]       = useState('');
+  // Line items for current order - each line can have its own modifiers
+  const [orderLines, setOrderLines] = useState([]);
+  const [openModPicker, setOpenModPicker] = useState(null); // lineId with open picker
+
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [toast, setToast]               = useState(null);
+  const [toast, setToast] = useState(null);
   const [showUnavailable, setShowUnavailable] = useState(false);
 
-  /* Modifier state — track which item has its modifier panel expanded */
-  const [expandedModItem, setExpandedModItem] = useState(null); // item id
-  const [modForms, setModForms]   = useState({}); // itemId -> { name, price_adjustment }
-  const [modErrors, setModErrors] = useState({}); // itemId -> string
+  // Modifier state — track which item has its modifier panel expanded
+  const [expandedModItem, setExpandedModItem] = useState(null);
+  const [modForms, setModForms] = useState({});
+  const [modErrors, setModErrors] = useState({});
   const [modSubmitting, setModSubmitting] = useState(false);
-  const [editingMod, setEditingMod] = useState(null); // { itemId, mod }
+  const [editingMod, setEditingMod] = useState(null);
 
   /* ── Derived ── */
   const availableItems = items.filter((i) => i.available);
@@ -283,30 +254,14 @@ export default function Items() {
     return matchSearch && matchCat;
   });
 
-  const groupedItems = filteredItems.reduce((acc, item) => {
-    const cat = item.category || 'Uncategorised';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(item);
-    return acc;
-  }, {});
-
-  const selectedItems = availableItems.filter((i) => (quantities[i.id] || 0) > 0);
-
-  // Build line objects used for summary grouping and order submission
-  const orderLines = selectedItems.map((i) => ({
-    itemId:    i.id,
-    item_name: i.name,
-    item:      i,
-    quantity:  quantities[i.id] || 0,
-    modifiers: selectedModifiers[i.id] || [],
-  }));
-
+  // Calculate totals from orderLines
   const totalAmount = orderLines.reduce((sum, line) => {
+    if (line.quantity <= 0) return sum;
     const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
     return sum + (line.item.price + modAdj) * line.quantity;
   }, 0);
 
-  const totalQty = orderLines.reduce((sum, l) => sum + l.quantity, 0);
+  const totalQty = orderLines.reduce((sum, line) => sum + line.quantity, 0);
 
   /* ── Helpers ── */
   const showToast = (message, type = 'success') => {
@@ -315,98 +270,121 @@ export default function Items() {
   };
 
   const resetQty = () => {
-    setQuantities((prev) => {
-      const r = { ...prev };
-      Object.keys(r).forEach((k) => (r[k] = 0));
-      return r;
-    });
-    setSelectedModifiers({});
+    setOrderLines([]);
   };
 
-  // Toggle a modifier for an item in the order selection
-  const toggleOrderModifier = (itemId, mod) => {
-    setSelectedModifiers((prev) => {
-      const current = prev[itemId] || [];
-      const has = current.some((m) => m.id === mod.id);
-      return {
-        ...prev,
-        [itemId]: has ? current.filter((m) => m.id !== mod.id) : [...current, mod],
-      };
-    });
+  // Add a new line for an item
+  const addLine = (item) => {
+    setOrderLines((prev) => [...prev, {
+      lineId: `line-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      itemId: item.id,
+      item: item,
+      quantity: 1,
+      modifiers: [],
+    }]);
   };
+
+  // Set quantity for a specific line
+  const setLineQty = (lineId, raw) => {
+    const qty = Math.max(0, parseInt(raw) || 0);
+    setOrderLines((prev) => prev.map((l) => l.lineId === lineId ? { ...l, quantity: qty } : l));
+  };
+
+  // Remove a line
+  const removeLine = (lineId) => {
+    setOrderLines((prev) => prev.filter((l) => l.lineId !== lineId));
+    if (openModPicker === lineId) setOpenModPicker(null);
+  };
+
+  // Toggle modifier for a line
+  const toggleLineModifier = (lineId, mod) => {
+    setOrderLines((prev) => prev.map((l) => {
+      if (l.lineId !== lineId) return l;
+      const has = l.modifiers.some((m) => m.id === mod.id);
+      return {
+        ...l,
+        modifiers: has
+          ? l.modifiers.filter((m) => m.id !== mod.id)
+          : [...l.modifiers, { id: mod.id, name: mod.name, price_adjustment: mod.price_adjustment }],
+      };
+    }));
+  };
+
+  // Build lines grouped for summary display
+  const groupedOrderLines = orderLines
+    .filter((l) => l.quantity > 0)
+    .sort((a, b) => (a.item.name || '').localeCompare(b.item.name || ''));
 
   /* ── Load ── */
-  const load = useCallback(async () => {
-    try {
-      setLoading(true); setError(null);
-      const [itemsData, customersData] = await Promise.all([
-        api.getItems(), api.getCustomers(),
-      ]);
-      setItems(itemsData || []);
-      setCustomers(customersData || []);
-      setQuantities((prev) => {
-        const next = {};
-        (itemsData || []).forEach((i) => { next[i.id] = prev[i.id] || 0; });
-        return next;
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const [itemsData, customersData] = await Promise.all([
+          api.getItems(),
+          api.getCustomers(),
+        ]);
+        setItems(itemsData || []);
+        setCustomers(customersData || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  // Open the order form automatically when the first item is selected
+  /* ── Auto-open order form when items selected ── */
   useEffect(() => {
     if (totalQty > 0 && !orderFormOpen) setOrderFormOpen(true);
-  }, [totalQty]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [totalQty]);
 
-  /* ── Quantity ── */
-  const handleQty = (itemId, raw) => {
-    const qty = Math.max(0, parseInt(raw) || 0);
-    setQuantities((prev) => ({ ...prev, [itemId]: qty }));
-    // Clear modifier selection when item is removed from order
-    if (qty === 0) {
-      setSelectedModifiers((prev) => {
-        const next = { ...prev };
-        delete next[itemId];
-        return next;
-      });
-    }
-  };
-
-  /* ── Item form ── */
+  /* ── Item form handlers ── */
   const openCreate = () => {
-    setItemForm(EMPTY_ITEM_FORM);
     setEditingItem(null);
+    setItemForm(EMPTY_ITEM_FORM);
     setItemFormError(null);
     setItemFormOpen(true);
     setOrderFormOpen(false);
   };
 
   const openEdit = (item) => {
-    setItemForm({
-      name: item.name, description: item.description || '',
-      price: String(item.price), category: item.category || '',
-    });
     setEditingItem(item);
+    setItemForm({
+      name: item.name,
+      description: item.description || '',
+      price: item.price?.toString() || '',
+      category: item.category || '',
+    });
     setItemFormError(null);
     setItemFormOpen(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const closeItemForm = () => {
-    setItemFormOpen(false); setEditingItem(null);
-    setItemForm(EMPTY_ITEM_FORM); setItemFormError(null);
+    setItemFormOpen(false);
+    setEditingItem(null);
+    setItemForm(EMPTY_ITEM_FORM);
+    setItemFormError(null);
   };
 
   const handleItemSubmit = async (e) => {
     e.preventDefault();
-    setItemSubmitting(true); setItemFormError(null);
+    const payload = {
+      name: itemForm.name.trim(),
+      description: itemForm.description.trim() || null,
+      price: parseFloat(itemForm.price) || 0,
+      category: itemForm.category.trim() || null,
+    };
+    if (!payload.name) {
+      setItemFormError('Name is required');
+      return;
+    }
+
+    setItemSubmitting(true);
+    setItemFormError(null);
     try {
-      const payload = { ...itemForm, price: parseFloat(itemForm.price), available: true };
       if (editingItem) {
         await api.updateItem(editingItem.id, payload);
         showToast('Item updated');
@@ -414,7 +392,9 @@ export default function Items() {
         await api.createItem(payload);
         showToast('Item created');
       }
-      closeItemForm(); load();
+      const itemsData = await api.getItems();
+      setItems(itemsData || []);
+      closeItemForm();
     } catch (err) {
       setItemFormError(err.message);
     } finally {
@@ -422,45 +402,96 @@ export default function Items() {
     }
   };
 
-  const itemField = (key) => ({
-    value: itemForm[key],
-    onChange: (e) => setItemForm((p) => ({ ...p, [key]: e.target.value })),
-    className: 'itm-input',
-  });
-
-  /* ── Delete ── */
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
+  const handleDelete = async () => {
     try {
       await api.deleteItem(deleteTarget.id);
-      setDeleteTarget(null);
       showToast('Item deleted');
-      load();
+      const itemsData = await api.getItems();
+      setItems(itemsData || []);
     } catch (err) {
-      setDeleteTarget(null);
       showToast(err.message, 'error');
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
-  /* ── Activate ── */
   const handleActivate = async (item) => {
     try {
       await api.activateItem(item.id);
-      showToast(`${item.name} is now available`);
-      load();
+      showToast('Item is now available');
+      const itemsData = await api.getItems();
+      setItems(itemsData || []);
     } catch (err) {
       showToast(err.message, 'error');
     }
   };
 
-  /* ── Order form ── */
-  const closeOrderForm = () => {
-    setOrderFormOpen(false);
-    setOrderForm(EMPTY_ORDER_FORM);
-    setOrderFormError(null);
-    resetQty();
+  /* ── Modifier form handlers ── */
+  const toggleModPanel = (itemId) => {
+    setExpandedModItem(expandedModItem === itemId ? null : itemId);
+    setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
+    setModErrors((p) => ({ ...p, [itemId]: null }));
   };
 
+  const handleModFormChange = (itemId, form) => {
+    setModForms((p) => ({ ...p, [itemId]: form }));
+  };
+
+  const startEditMod = (mod) => {
+    setEditingMod(mod);
+    setModForms((p) => ({ ...p, [mod.item_id]: { name: mod.name, price_adjustment: mod.price_adjustment } }));
+  };
+
+  const cancelEditMod = () => {
+    setEditingMod(null);
+  };
+
+  const handleModSubmit = async (itemId) => {
+    const form = modForms[itemId];
+    if (!form?.name?.trim()) {
+      setModErrors((p) => ({ ...p, [itemId]: 'Name is required' }));
+      return;
+    }
+
+    setModSubmitting(true);
+    setModErrors((p) => ({ ...p, [itemId]: null }));
+    try {
+      if (editingMod) {
+        await api.updateItemModifier(itemId, editingMod.id, {
+          name: form.name.trim(),
+          price_adjustment: parseFloat(form.price_adjustment) || 0,
+        });
+        showToast('Modifier updated');
+      } else {
+        await api.createItemModifier(itemId, {
+          name: form.name.trim(),
+          price_adjustment: parseFloat(form.price_adjustment) || 0,
+        });
+        showToast('Modifier added');
+      }
+      const itemsData = await api.getItems();
+      setItems(itemsData || []);
+      setEditingMod(null);
+      setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
+    } catch (err) {
+      setModErrors((p) => ({ ...p, [itemId]: err.message }));
+    } finally {
+      setModSubmitting(false);
+    }
+  };
+
+  const handleDeleteMod = async (itemId, mod) => {
+    try {
+      await api.deleteItemModifier(itemId, mod.id);
+      showToast('Modifier deleted');
+      const itemsData = await api.getItems();
+      setItems(itemsData || []);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  /* ── Customer change ── */
   const handleCustomerChange = async (customerId) => {
     const customer = customers.find((c) => c.id === parseInt(customerId));
     setOrderForm((p) => ({
@@ -470,33 +501,40 @@ export default function Items() {
     }));
   };
 
+  /* ── Order submit ── */
   const handleOrderSubmit = async (e) => {
     e.preventDefault();
-    if (selectedItems.length === 0) {
-      setOrderFormError('Select at least one item from the menu below.');
+    if (orderLines.filter((l) => l.quantity > 0).length === 0) {
+      setOrderFormError('Add at least one item');
       return;
     }
-    setOrderSubmitting(true); setOrderFormError(null);
+
+    setOrderSubmitting(true);
+    setOrderFormError(null);
     try {
       await api.createOrder({
         customer_id: parseInt(orderForm.customer_id) || null,
         delivery_address: orderForm.delivery_address,
+        status: 'pending',
         notes: orderForm.notes,
         payment_method: orderForm.payment_method,
         scheduled_date: localDatetimeToUtcIso(orderForm.scheduled_date),
-        items: orderLines.map((line) => ({
-          item_id:   line.itemId,
-          quantity:  line.quantity,
-          modifiers: line.modifiers.map((m) => ({
-            modifier_id:      m.id,
-            name:             m.name,
-            price_adjustment: m.price_adjustment,
+        items: orderLines
+          .filter((l) => l.quantity > 0)
+          .map((line) => ({
+            item_id: line.itemId,
+            quantity: line.quantity,
+            modifiers: line.modifiers.map((m) => ({
+              modifier_id: m.id,
+              name: m.name,
+              price_adjustment: m.price_adjustment,
+            })),
           })),
-        })),
       });
       showToast('Order placed successfully');
-      closeOrderForm();
-      resetQty();
+      setOrderFormOpen(false);
+      setOrderForm(EMPTY_ORDER_FORM);
+      setOrderLines([]);
     } catch (err) {
       setOrderFormError(err.message);
     } finally {
@@ -504,152 +542,135 @@ export default function Items() {
     }
   };
 
-  const ordField = (key) => ({
-    value: orderForm[key],
-    onChange: (e) => setOrderForm((p) => ({ ...p, [key]: e.target.value })),
-  });
+  if (loading) return (
+    <div className="itm-root">
+      <div className="itm-load">
+        <div className="itm-spinner" />
+        <span className="itm-load-text">Loading…</span>
+      </div>
+    </div>
+  );
 
-  /* ── Item-scoped modifier CRUD ── */
-  const toggleModPanel = (itemId) => {
-    setExpandedModItem((prev) => prev === itemId ? null : itemId);
-    setEditingMod(null);
-    setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
-    setModErrors((p) => ({ ...p, [itemId]: null }));
-  };
+  if (error) return (
+    <div className="itm-root">
+      <div className="itm-error-page">
+        <p className="itm-error-msg">{error}</p>
+        <button className="itm-retry" onClick={() => window.location.reload()}>Try again</button>
+      </div>
+    </div>
+  );
 
-  const startEditMod = (item, mod) => {
-    setEditingMod({ itemId: item.id, mod });
-    setModForms((p) => ({
-      ...p,
-      [item.id]: { name: mod.name, price_adjustment: String(mod.price_adjustment) },
-    }));
-    setModErrors((p) => ({ ...p, [item.id]: null }));
-  };
-
-  const cancelEditMod = (itemId) => {
-    setEditingMod(null);
-    setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
-    setModErrors((p) => ({ ...p, [itemId]: null }));
-  };
-
-  const handleModSubmit = async (e, item) => {
-    e.preventDefault();
-    setModSubmitting(true);
-    setModErrors((p) => ({ ...p, [item.id]: null }));
-    const form = modForms[item.id] || EMPTY_MOD_FORM;
-    const payload = { name: form.name, price_adjustment: parseFloat(form.price_adjustment) || 0 };
-    try {
-      if (editingMod && editingMod.itemId === item.id) {
-        await api.updateItemModifier(item.id, editingMod.mod.id, payload);
-      } else {
-        await api.createItemModifier(item.id, payload);
-      }
-      setEditingMod(null);
-      setModForms((p) => ({ ...p, [item.id]: EMPTY_MOD_FORM }));
-      load(); // reload items so modifiers are refreshed inline
-    } catch (err) {
-      setModErrors((p) => ({ ...p, [item.id]: err.message }));
-    } finally {
-      setModSubmitting(false);
-    }
-  };
-
-  const handleDeleteMod = async (item, mod) => {
-    try {
-      await api.deleteItemModifier(item.id, mod.id);
-      load();
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  /* ── Render ── */
   return (
-    <>
-      <div className="itm-root">
+    <div className="itm-root">
+      {toast && <Toast message={toast.message} type={toast.type} />}
+      {deleteTarget && (
+        <ConfirmDialog
+          title={`Delete ${deleteTarget.name}?`}
+          body="This action cannot be undone."
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
 
-        {toast && <Toast message={toast.message} type={toast.type} />}
-
-        {deleteTarget && (
-          <ConfirmDialog
-            title="Delete item?"
-            body={<><strong>{deleteTarget.name}</strong> will be permanently removed from the menu.</>}
-            onConfirm={confirmDelete}
-            onCancel={() => setDeleteTarget(null)}
-          />
-        )}
-
-        {/* Header */}
-        <div className="itm-header">
-          <div>
-            <h1 className="itm-title">The <em>Menu</em></h1>
-            <div className="itm-meta">
-              {availableItems.length} available item{availableItems.length !== 1 ? 's' : ''}
-              {categories.length > 0 && ` · ${categories.length} categories`}
-              {unavailableItems.length > 0 && ` · ${unavailableItems.length} unavailable`}
-            </div>
-          </div>
-          <div className="itm-header-actions">
-            {itemFormOpen
-              ? <button className="btn-ghost" onClick={closeItemForm}>✕ Cancel</button>
-              : <button className="btn-primary" onClick={openCreate}>+ Add Item</button>
-            }
-          </div>
+      {/* Header */}
+      <div className="itm-header">
+        <div>
+          <h1 className="itm-title">Menu</h1>
+          <p className="itm-subtitle">{availableItems.length} items</p>
         </div>
-
-        {/* Item form */}
-        <div className={`itm-panel-wrap ${itemFormOpen ? 'open' : 'closed'}`}>
-          <form className="itm-panel" onSubmit={handleItemSubmit}>
-            <div className="itm-panel-head">
-              <div className="itm-panel-title">
-                {editingItem ? <>Edit <em>item</em></> : <>New <em>item</em></>}
-              </div>
-            </div>
-            {itemFormError && <div className="itm-form-error">{itemFormError}</div>}
-            <div className="itm-form-body">
-              <div className="itm-field full">
-                <label className="itm-label">Name *</label>
-                <input {...itemField('name')} placeholder="e.g. Margherita Pizza" required />
-              </div>
-              <div className="itm-field full">
-                <label className="itm-label">Description</label>
-                <input {...itemField('description')} placeholder="Short description" />
-              </div>
-              <div className="itm-field">
-                <label className="itm-label">Price *</label>
-                <input {...itemField('price')} type="number" step="0.01" min="0"
-                  placeholder="0.00" required />
-              </div>
-              <div className="itm-field">
-                <label className="itm-label">Category *</label>
-                <input {...itemField('category')} placeholder="e.g. mains, drinks…" required />
-              </div>
-            </div>
-            <div className="itm-form-actions">
-              <button type="submit" className="btn-primary" disabled={itemSubmitting}>
-                {itemSubmitting ? 'Saving…' : editingItem ? 'Update item' : 'Create item'}
-              </button>
-              <button type="button" className="btn-ghost" onClick={closeItemForm}>Cancel</button>
-            </div>
-          </form>
+        <div className="itm-header-actions">
+          <button className="btn-ghost" onClick={() => setShowUnavailable((p) => !p)}>
+            {showUnavailable ? 'Hide' : 'Show'} Unavailable ({unavailableItems.length})
+          </button>
+          <button className="btn-primary" onClick={openCreate}>+ Add Item</button>
         </div>
+      </div>
 
-        {/* Order form */}
-        <div className={`itm-panel-wrap ${orderFormOpen ? 'open' : 'closed'}`}>
-          <form className="itm-panel" onSubmit={handleOrderSubmit}>
-            <div className="itm-panel-head">
-              <div className="itm-panel-title">New <em>order</em></div>
-              <button type="button" className="btn-ghost" onClick={closeOrderForm}
-                style={{ padding: '5px 12px', fontSize: 11 }}>✕</button>
+      {/* Item Form Modal */}
+      {itemFormOpen && (
+        <div className="itm-overlay" onClick={closeItemForm}>
+          <div className="itm-form" onClick={(e) => e.stopPropagation()}>
+            <div className="itm-form-head">
+              <h2 className="itm-form-title">{editingItem ? 'Edit Item' : 'New Item'}</h2>
+              <button className="itm-form-close" onClick={closeItemForm}>✕</button>
             </div>
-            {orderFormError && <div className="itm-form-error">{orderFormError}</div>}
-            <div className="ord-body">
-              {/* Left col — form fields */}
-              <div className="ord-col">
+            <form onSubmit={handleItemSubmit}>
+              {itemFormError && <div className="itm-form-error">{itemFormError}</div>}
+              <div className="itm-form-body">
                 <div className="itm-field">
-                  <label className="itm-label">Customer</label>
+                  <label className="itm-label">Name *</label>
+                  <input
+                    className="itm-input"
+                    value={itemForm.name}
+                    onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                    placeholder="Pizza Margherita"
+                    autoFocus
+                  />
+                </div>
+                <div className="itm-field">
+                  <label className="itm-label">Description</label>
+                  <textarea
+                    className="itm-textarea"
+                    value={itemForm.description}
+                    onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+                    placeholder="Fresh tomatoes, mozzarella, basil..."
+                  />
+                </div>
+                <div className="itm-field-row">
+                  <div className="itm-field">
+                    <label className="itm-label">Price</label>
+                    <input
+                      className="itm-input"
+                      type="number"
+                      step="0.01"
+                      value={itemForm.price}
+                      onChange={(e) => setItemForm({ ...itemForm, price: e.target.value })}
+                      placeholder="12.99"
+                    />
+                  </div>
+                  <div className="itm-field">
+                    <label className="itm-label">Category</label>
+                    <input
+                      className="itm-input"
+                      value={itemForm.category}
+                      onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
+                      placeholder="Pizza"
+                      list="categories"
+                    />
+                    <datalist id="categories">
+                      {categories.map((c) => (
+                        <option key={c} value={c} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+              </div>
+              <div className="itm-form-actions">
+                <button type="button" className="btn-ghost" onClick={closeItemForm}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={itemSubmitting}>
+                  {itemSubmitting ? 'Saving...' : editingItem ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Order Form Modal */}
+      {orderFormOpen && (
+        <div className="itm-overlay" onClick={() => setOrderFormOpen(false)}>
+          <div className="ord-form" onClick={(e) => e.stopPropagation()}>
+            <div className="ord-form-head">
+              <h2 className="ord-form-title">New Order</h2>
+              <button className="ord-form-close" onClick={() => setOrderFormOpen(false)}>✕</button>
+            </div>
+            <form onSubmit={handleOrderSubmit}>
+              {orderFormError && <div className="ord-form-error">{orderFormError}</div>}
+              <div className="ord-form-body">
+                <div className="ord-field">
+                  <label className="ord-label">Customer</label>
                   <select
-                    className="itm-select"
+                    className="ord-select"
                     value={orderForm.customer_id}
                     onChange={(e) => handleCustomerChange(e.target.value)}
                   >
@@ -659,280 +680,213 @@ export default function Items() {
                     ))}
                   </select>
                 </div>
-                <div className="itm-field">
-                  <label className="itm-label">Delivery Address</label>
-                  <input className="itm-input" {...ordField('delivery_address')}
-                    placeholder="Street address" />
-                </div>
-                <div className="itm-field">
-                  <label className="itm-label">Payment Method</label>
-                  <select className="itm-select" value={orderForm.payment_method}
-                    onChange={(e) => setOrderForm((p) => ({ ...p, payment_method: e.target.value }))}>
-                    <option value="cash">Cash</option>
-                    <option value="e-transfer">e-Transfer</option>
-                  </select>
-                </div>
-                <div className="itm-field">
-                  <label className="itm-label">Scheduled Date</label>
-                  <input className="itm-input" type="datetime-local"
-                    value={orderForm.scheduled_date}
-                    onChange={(e) => setOrderForm((p) => ({ ...p, scheduled_date: e.target.value }))} />
-                </div>
-                <div className="itm-field">
-                  <label className="itm-label">Notes</label>
-                  <input className="itm-input" {...ordField('notes')}
-                    placeholder="Any special instructions" />
-                </div>
-              </div>
 
-              {/* Right col — summary + history */}
-              <div className="ord-col">
-                {/* Order summary */}
-                <div className="ord-summary">
-                  <div className="ord-summary-title">Order summary</div>
-                  {orderLines.length === 0
-                    ? <div className="ord-summary-empty">Select items from the menu below</div>
-                    : <>
-                        {groupOrderItems(orderLines).map((line, i) => {
-                          const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
-                          return (
-                            <div key={i} className="ord-line">
-                              <div className="ord-line-body">
-                                <span className="ord-line-name">{line.item_name}</span>
-                                {line.modifiers.length > 0 && (
-                                  <span className="ord-line-mods">
-                                    {line.modifiers.map((m) => m.name).join(', ')}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="ord-line-qty">×{line.quantity}</span>
-                              <span className="ord-line-price">
-                                {fmtUsd((line.item.price + modAdj) * line.quantity)}
-                              </span>
-                            </div>
-                          );
-                        })}
-                        <div className="ord-total">
-                          <span className="ord-total-label">Total</span>
-                          <span className="ord-total-value">{fmtUsd(totalAmount)}</span>
-                        </div>
-                      </>
-                  }
-                </div>
-
-                {/* Customer order history */}
-                {orderForm.customer_id && (
-                  <CustomerOrderHistory 
-                    customerId={parseInt(orderForm.customer_id)} 
-                    variant="ord"
-                    showTitle={true}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="itm-form-actions">
-              <button type="submit" className="btn-order" disabled={orderSubmitting || selectedItems.length === 0}>
-                {orderSubmitting ? 'Placing…' : `Place order · ${fmtUsd(totalAmount)}`}
-              </button>
-              <button type="button" className="btn-ghost" onClick={closeOrderForm}>Cancel</button>
-            </div>
-          </form>
-        </div>
-
-        {/* Loading */}
-        {loading && (
-          <div className="itm-load">
-            <div className="itm-spinner" />
-            <span className="itm-load-text">Loading menu…</span>
-          </div>
-        )}
-
-        {/* Error */}
-        {!loading && error && (
-          <div className="itm-error">
-            <p className="itm-error-msg">{error}</p>
-            <button className="itm-retry" onClick={load}>Try again</button>
-          </div>
-        )}
-
-        {/* Content */}
-        {!loading && !error && (
-          <>
-            {/* Filters */}
-            <div className="itm-filters">
-              <div className="itm-search-wrap">
-                <span className="itm-search-icon"><SearchIcon /></span>
-                <input
-                  className="itm-search"
-                  type="text"
-                  placeholder="Search menu…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                <CustomerOrderHistory
+                  customerId={orderForm.customer_id ? parseInt(orderForm.customer_id) : null}
+                  variant="ord"
+                  showTitle={true}
                 />
-              </div>
-              <div className="itm-cat-pills">
-                <button
-                  className={`itm-cat-pill${catFilter === '' ? ' active' : ''}`}
-                  onClick={() => setCatFilter('')}
-                >All</button>
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    className={`itm-cat-pill${catFilter === cat ? ' active' : ''}`}
-                    onClick={() => setCatFilter(cat === catFilter ? '' : cat)}
-                  >{cat}</button>
-                ))}
-              </div>
-            </div>
 
-            {/* Empty states */}
-            {availableItems.length === 0 && unavailableItems.length === 0 && (
-              <div className="itm-empty">
-                <span style={{ fontSize: 32, opacity: 0.25 }}>✦</span>
-                <div className="itm-empty-title">Menu is empty</div>
-                <div className="itm-empty-sub">Add your first item to get started.</div>
-              </div>
-            )}
-
-            {availableItems.length > 0 && filteredItems.length === 0 && (
-              <div className="itm-empty">
-                <div className="itm-empty-title">No items found</div>
-                <div className="itm-empty-sub">Try a different search or category.</div>
-              </div>
-            )}
-
-            {/* Category sections */}
-            {Object.entries(groupedItems).map(([category, catItems], gi) => (
-              <div
-                key={category}
-                className="itm-category"
-                style={{ animationDelay: `${gi * 60}ms` }}
-              >
-                <div className="itm-cat-head">
-                  <h2 className="itm-cat-name">{category}</h2>
-                  <span className="itm-cat-count">
-                    {catItems.length} item{catItems.length !== 1 ? 's' : ''}
-                  </span>
+                <div className="ord-field">
+                  <label className="ord-label">Delivery Address</label>
+                  <input
+                    className="ord-input"
+                    value={orderForm.delivery_address}
+                    onChange={(e) => setOrderForm({ ...orderForm, delivery_address: e.target.value })}
+                    placeholder="Street address"
+                  />
                 </div>
-                <div className="itm-grid">
-                  {catItems.map((item, ii) => (
-                    <ItemCard
-                      key={item.id}
-                      item={item}
-                      qty={quantities[item.id] || 0}
-                      onQtyChange={handleQty}
-                      onEdit={openEdit}
-                      onDelete={(i) => setDeleteTarget(i)}
-                      onActivate={handleActivate}
-                      delay={gi * 60 + ii * 40}
-                      modPanelOpen={expandedModItem === item.id}
-                      onToggleModPanel={() => toggleModPanel(item.id)}
-                      modForm={modForms[item.id] || EMPTY_MOD_FORM}
-                      onModFormChange={(itemId, key, val) =>
-                        setModForms((p) => ({ ...p, [itemId]: { ...(p[itemId] || EMPTY_MOD_FORM), [key]: val } }))}
-                      modError={modErrors[item.id]}
-                      modSubmitting={modSubmitting}
-                      editingMod={editingMod?.itemId === item.id ? editingMod : null}
-                      onStartEditMod={startEditMod}
-                      onCancelEditMod={cancelEditMod}
-                      onModSubmit={handleModSubmit}
-                      onDeleteMod={handleDeleteMod}
-                      orderSelectedMods={selectedModifiers[item.id] || []}
-                      onToggleOrderMod={toggleOrderModifier}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
 
-            {/* Unavailable items section */}
-            {unavailableItems.length > 0 && (
-              <div className="itm-unavailable-section">
-                <button
-                  className="itm-unavailable-toggle"
-                  onClick={() => setShowUnavailable(!showUnavailable)}
-                >
-                  <span className="itm-unavailable-toggle-icon">{showUnavailable ? '▼' : '▶'}</span>
-                  <span className="itm-unavailable-title">Unavailable Items</span>
-                  <span className="itm-unavailable-count">
-                    {unavailableItems.length} item{unavailableItems.length !== 1 ? 's' : ''}
-                  </span>
-                </button>
-                {showUnavailable && (
-                  <div className="itm-grid">
-                    {unavailableItems.map((item, ii) => (
-                      <ItemCard
-                        key={item.id}
-                        item={item}
-                        qty={0}
-                        onQtyChange={() => {}}
-                        onEdit={openEdit}
-                        onDelete={(i) => setDeleteTarget(i)}
-                        onActivate={handleActivate}
-                        delay={ii * 40}
-                        modPanelOpen={expandedModItem === item.id}
-                        onToggleModPanel={() => toggleModPanel(item.id)}
-                        modForm={modForms[item.id] || EMPTY_MOD_FORM}
-                        onModFormChange={(itemId, key, val) =>
-                          setModForms((p) => ({ ...p, [itemId]: { ...(p[itemId] || EMPTY_MOD_FORM), [key]: val } }))}
-                        modError={modErrors[item.id]}
-                        modSubmitting={modSubmitting}
-                        editingMod={editingMod?.itemId === item.id ? editingMod : null}
-                        onStartEditMod={startEditMod}
-                        onCancelEditMod={cancelEditMod}
-                        onModSubmit={handleModSubmit}
-                        onDeleteMod={handleDeleteMod}
-                        orderSelectedMods={[]}
-                        onToggleOrderMod={() => {}}
-                      />
-                    ))}
+                <div className="ord-field-row">
+                  <div className="ord-field">
+                    <label className="ord-label">Payment</label>
+                    <select
+                      className="ord-select"
+                      value={orderForm.payment_method}
+                      onChange={(e) => setOrderForm({ ...orderForm, payment_method: e.target.value })}
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="e-transfer">e-Transfer</option>
+                    </select>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Sticky order bar — summary only; order form opens automatically */}
-            {totalQty > 0 && (
-              <div className="itm-order-bar">
-                <div className="itm-order-bar-left">
-                  <span className="itm-order-bar-label">
-                    {totalQty} item{totalQty !== 1 ? 's' : ''} selected
-                  </span>
-                  <span className="itm-order-bar-items">
-                    {groupOrderItems(orderLines).map((line, i) => {
-                      const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
-                      const linePrice = (line.item.price + modAdj) * line.quantity;
-                      const modStr = line.modifiers.length > 0
-                        ? ` (${line.modifiers.map((m) => m.name).join(', ')})`
-                        : '';
-                      return (
-                        <span key={i} className="itm-order-bar-item">
-                          {line.quantity}× {line.item_name}{modStr} · {fmtUsd(linePrice)}
-                        </span>
-                      );
-                    })}
-                  </span>
+                  <div className="ord-field">
+                    <label className="ord-label">Schedule</label>
+                    <input
+                      className="ord-input"
+                      type="datetime-local"
+                      value={orderForm.scheduled_date}
+                      onChange={(e) => setOrderForm({ ...orderForm, scheduled_date: e.target.value })}
+                    />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                  <span className="itm-order-bar-total">{fmtUsd(totalAmount)}</span>
-                  <button className="itm-order-bar-clear" onClick={resetQty}>Clear</button>
+
+                <div className="ord-field">
+                  <label className="ord-label">Notes</label>
+                  <input
+                    className="ord-input"
+                    value={orderForm.notes}
+                    onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
+                    placeholder="Special instructions"
+                  />
+                </div>
+
+                {/* Order lines in this order */}
+                <div className="ord-items-section">
+                  <div className="ord-items-title">Items in order</div>
+                  {groupedOrderLines.length === 0 ? (
+                    <div className="ord-items-empty">No items — add from menu below</div>
+                  ) : (
+                    <div className="ord-items-list">
+                      {groupedOrderLines.map((line) => {
+                        const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
+                        const lineTotal = (line.item.price + modAdj) * line.quantity;
+                        const isPickerOpen = openModPicker === line.lineId;
+                        return (
+                          <div key={line.lineId} className="ord-line">
+                            <div className="ord-line-main">
+                              <span className="ord-line-name">{line.item.name}</span>
+                              <div className="ord-line-qty">
+                                <button type="button" className="ord-qty-btn" onClick={() => setLineQty(line.lineId, line.quantity - 1)}>−</button>
+                                <input type="number" min="0" className="ord-qty-input" value={line.quantity} onChange={(e) => setLineQty(line.lineId, e.target.value)} />
+                                <button type="button" className="ord-qty-btn" onClick={() => setLineQty(line.lineId, line.quantity + 1)}>+</button>
+                              </div>
+                              <span className="ord-line-price">{fmtUsd(lineTotal)}</span>
+                              <button type="button" className="ord-mod-toggle" onClick={() => setOpenModPicker(isPickerOpen ? null : line.lineId)}>
+                                {isPickerOpen ? 'Hide' : `Mods${line.modifiers.length > 0 ? ` (${line.modifiers.length})` : ''}`}
+                              </button>
+                              <button type="button" className="ord-remove-line" onClick={() => removeLine(line.lineId)}>✕</button>
+                            </div>
+                            {line.modifiers.length > 0 && (
+                              <div className="ord-mods-applied">
+                                {line.modifiers.map((m) => (
+                                  <span key={m.id} className="ord-mod-pill">
+                                    {m.name}
+                                    {m.price_adjustment !== 0 && <span className="ord-mod-adj">{m.price_adjustment > 0 ? '+' : ''}{fmtUsd(m.price_adjustment)}</span>}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {isPickerOpen && line.item.modifiers?.length > 0 && (
+                              <div className="ord-mod-picker">
+                                {line.item.modifiers.map((mod) => {
+                                  const active = line.modifiers.some((m) => m.id === mod.id);
+                                  return (
+                                    <button key={mod.id} type="button" className={`ord-mod-option${active ? ' active' : ''}`} onClick={() => toggleLineModifier(line.lineId, mod)}>
+                                      {mod.name}
+                                      {mod.price_adjustment !== 0 && <span className="ord-mod-adj">{mod.price_adjustment > 0 ? '+' : ''}{fmtUsd(mod.price_adjustment)}</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="ord-total">
+                  <span className="ord-total-label">Total</span>
+                  <span className="ord-total-value">{fmtUsd(totalAmount)}</span>
                 </div>
               </div>
-            )}
-          </>
-        )}
+              <div className="ord-form-actions">
+                <button type="button" className="btn-ghost" onClick={() => { setOrderFormOpen(false); resetQty(); }}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={orderSubmitting || groupedOrderLines.length === 0}>
+                  {orderSubmitting ? 'Placing...' : `Place Order · ${fmtUsd(totalAmount)}`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
+      {/* Filters */}
+      <div className="itm-filters">
+        <input
+          className="itm-search"
+          placeholder="Search menu..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select className="itm-cat-select" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
       </div>
-    </>
-  );
-}
 
-function SearchIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-    </svg>
+      {/* Menu Items */}
+      {filteredItems.map((item, i) => (
+        <ItemCard
+          key={item.id}
+          item={item}
+          qty={0}
+          onQtyChange={() => {}}
+          onEdit={openEdit}
+          onDelete={(item) => setDeleteTarget(item)}
+          onActivate={handleActivate}
+          delay={i}
+          modPanelOpen={expandedModItem === item.id}
+          onToggleModPanel={() => toggleModPanel(item.id)}
+          modForm={modForms[item.id] || EMPTY_MOD_FORM}
+          onModFormChange={(form) => handleModFormChange(item.id, form)}
+          modError={modErrors[item.id]}
+          modSubmitting={modSubmitting}
+          editingMod={editingMod}
+          onStartEditMod={startEditMod}
+          onCancelEditMod={cancelEditMod}
+          onModSubmit={() => handleModSubmit(item.id)}
+          onDeleteMod={(modId, mod) => handleDeleteMod(item.id, mod)}
+        />
+      ))}
+
+      {/* Unavailable Items */}
+      {showUnavailable && unavailableItems.length > 0 && (
+        <>
+          <div className="itm-unavailable-header">Unavailable Items</div>
+          {unavailableItems.map((item, i) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              qty={0}
+              onQtyChange={() => {}}
+              onEdit={openEdit}
+              onDelete={(item) => setDeleteTarget(item)}
+              onActivate={handleActivate}
+              delay={i}
+              modPanelOpen={expandedModItem === item.id}
+              onToggleModPanel={() => toggleModPanel(item.id)}
+              modForm={modForms[item.id] || EMPTY_MOD_FORM}
+              onModFormChange={(form) => handleModFormChange(item.id, form)}
+              modError={modErrors[item.id]}
+              modSubmitting={modSubmitting}
+              editingMod={editingMod}
+              onStartEditMod={startEditMod}
+              onCancelEditMod={cancelEditMod}
+              onModSubmit={() => handleModSubmit(item.id)}
+              onDeleteMod={(modId, mod) => handleDeleteMod(item.id, mod)}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Sticky order bar */}
+      {totalQty > 0 && (
+        <div className="itm-order-bar">
+          <div className="itm-order-bar-left">
+            <span className="itm-order-bar-qty">
+              {totalQty} item{totalQty !== 1 ? 's' : ''} · {fmtUsd(totalAmount)}
+            </span>
+            <button className="itm-order-bar-clear" onClick={resetQty}>Clear</button>
+          </div>
+          <button className="itm-order-bar-btn" onClick={() => setOrderFormOpen(true)}>
+            Review Order →
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
