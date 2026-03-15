@@ -370,14 +370,12 @@ export default function Items() {
     setOrderFormOpen(true);
     setItemFormOpen(false);
     setOrderFormError(null);
-    setOrderHistory([]);
   };
 
   const closeOrderForm = () => {
     setOrderFormOpen(false);
     setOrderForm(EMPTY_ORDER_FORM);
     setOrderFormError(null);
-    setOrderHistory([]);
     resetQty();
   };
 
@@ -388,17 +386,6 @@ export default function Items() {
       customer_id: customerId,
       delivery_address: customer?.address || p.delivery_address,
     }));
-    setOrderHistory([]);
-    if (!customerId) return;
-    try {
-      setHistoryLoading(true);
-      const orders = await api.getOrdersByCustomer(customerId);
-      setOrderHistory(orders || []);
-    } catch {
-      setOrderHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
   };
 
   const handleOrderSubmit = async (e) => {
