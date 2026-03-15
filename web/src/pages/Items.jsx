@@ -262,8 +262,8 @@ export default function Items() {
   const [toast, setToast]               = useState(null);
   const [showUnavailable, setShowUnavailable] = useState(false);
 
-  /* Modifier state — track which item has its modifier panel expanded */
-  const [expandedModItem, setExpandedModItem] = useState(null); // item id
+  /* Modifier state — track which items have their modifier panels expanded */
+  const [expandedModItems, setExpandedModItems] = useState({}); // itemId -> boolean
   const [modForms, setModForms]   = useState({}); // itemId -> { name, price_adjustment }
   const [modErrors, setModErrors] = useState({}); // itemId -> string
   const [modSubmitting, setModSubmitting] = useState(false);
@@ -512,7 +512,10 @@ export default function Items() {
 
   /* ── Item-scoped modifier CRUD ── */
   const toggleModPanel = (itemId) => {
-    setExpandedModItem((prev) => prev === itemId ? null : itemId);
+    setExpandedModItems((prev) => ({
+      ...prev,
+      [itemId]: !prev[itemId],
+    }));
     setEditingMod(null);
     setModForms((p) => ({ ...p, [itemId]: EMPTY_MOD_FORM }));
     setModErrors((p) => ({ ...p, [itemId]: null }));
@@ -827,7 +830,7 @@ export default function Items() {
                       onDelete={(i) => setDeleteTarget(i)}
                       onActivate={handleActivate}
                       delay={gi * 60 + ii * 40}
-                      modPanelOpen={expandedModItem === item.id}
+                      modPanelOpen={expandedModItems[item.id]}
                       onToggleModPanel={() => toggleModPanel(item.id)}
                       modForm={modForms[item.id] || EMPTY_MOD_FORM}
                       onModFormChange={(itemId, key, val) =>
@@ -872,7 +875,7 @@ export default function Items() {
                         onDelete={(i) => setDeleteTarget(i)}
                         onActivate={handleActivate}
                         delay={ii * 40}
-                        modPanelOpen={expandedModItem === item.id}
+                      modPanelOpen={expandedModItems[item.id]}
                         onToggleModPanel={() => toggleModPanel(item.id)}
                         modForm={modForms[item.id] || EMPTY_MOD_FORM}
                         onModFormChange={(itemId, key, val) =>
