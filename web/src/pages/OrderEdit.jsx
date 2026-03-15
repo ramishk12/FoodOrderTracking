@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import CustomerOrderHistory from '../components/CustomerOrderHistory';
 
 
 /* ─── Helpers ────────────────────────────── */
@@ -14,13 +15,6 @@ function fmtUsd(n) {
   }).format(n ?? 0);
 }
 
-function fmtDate(iso) {
-  if (!iso) return 'N/A';
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
-
 function utcToLocalInput(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -31,32 +25,6 @@ function utcToLocalInput(iso) {
 function localInputToUtcIso(local) {
   if (!local) return null;
   return new Date(local).toISOString();
-}
-
-function groupOrderItems(orderItems) {
-  const groups = [];
-  const seen = new Map();
-
-  for (const oi of orderItems) {
-    const modKey = (oi.modifiers || [])
-      .map((m) => m.modifier_id ?? m.modifier_name)
-      .sort()
-      .join(',');
-    const key = `${oi.item_id}::${modKey}`;
-
-    if (seen.has(key)) {
-      groups[seen.get(key)].quantity += oi.quantity;
-    } else {
-      seen.set(key, groups.length);
-      groups.push({
-        item_id: oi.item_id,
-        item_name: oi.item_name,
-        quantity: oi.quantity,
-        modifiers: oi.modifiers || [],
-      });
-    }
-  }
-  return groups;
 }
 
 /* ─── OrderEdit ──────────────────────────── */
@@ -90,9 +58,6 @@ export default function OrderEdit() {
   const [custSaving, setCustSaving]   = useState(false);
   const [custError, setCustError]     = useState(null);
 
-  const [orderHistory, setOrderHistory]       = useState([]);
-  const [historyVisible, setHistoryVisible]   = useState(false);
-
   /* ── Load ── */
   const load = useCallback(async () => {
     try {
@@ -125,10 +90,6 @@ export default function OrderEdit() {
         })),
       }));
       setLineItems(lines);
-
-      if (orderData.customer_id) {
-        fetchHistory(orderData.customer_id, parseInt(id));
-      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -142,14 +103,6 @@ export default function OrderEdit() {
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
-  };
-
-  const fetchHistory = async (customerId, excludeId) => {
-    try {
-      const orders = await api.getOrdersByCustomer(customerId);
-      setOrderHistory((orders || []).filter((o) => o.id !== excludeId));
-      setHistoryVisible(true);
-    } catch { setOrderHistory([]); }
   };
 
   /* ── Line item helpers ── */
@@ -392,39 +345,11 @@ export default function OrderEdit() {
                 </div>
 
                 {/* Order history */}
-                {historyVisible && orderHistory.length > 0 && (
-                  <div className="oe-history">
-                    <div className="oe-history-title">
-                      Order history · {orderHistory.length} previous order{orderHistory.length !== 1 ? 's' : ''}
-                    </div>
-                    {orderHistory.map((o) => (
-                      <div key={o.id} className="oe-hist-row">
-                        <div className="oe-hist-top">
-                          <span className="oe-hist-id">#{o.id}</span>
-                          <span className="oe-hist-date">{fmtDate(o.created_at)}</span>
-                        </div>
-                        <div className="oe-hist-items">
-                          {o.order_items?.length
-                            ? groupOrderItems(o.order_items).sort((a, b) => (a.item_name || '').localeCompare(b.item_name || '')).map((i, idx) => (
-                                <div key={idx}>
-                                  {i.quantity}× {i.item_name}
-                                  {i.modifiers?.length > 0 && (
-                                    <span className="oe-hist-mod">
-                                      {' '}({i.modifiers.map((m) => m.modifier_name).join(', ')})
-                                    </span>
-                                  )}
-                                </div>
-                              ))
-                            : <div>No items</div>}
-                        </div>
-                        <div className="oe-hist-footer">
-                          <span className="oe-hist-total">{fmtUsd(o.total_amount)}</span>
-                          <span className="oe-hist-status">{o.status}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <CustomerOrderHistory 
+                  customerId={formData.customer_id ? parseInt(formData.customer_id) : null} 
+                  variant="oe"
+                  excludeId={parseInt(id)}
+                />
 
                 {/* Address + notes */}
                 <div className="oe-field">

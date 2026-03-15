@@ -2591,6 +2591,9 @@ body {
   border: 1px solid var(--rule); border-radius: 10px;
   padding: 2px 8px;
 }
+.ord-hist-mod {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+}
 
 /* Category sections */
 .itm-category {
@@ -3507,6 +3510,9 @@ body {
 .oe-hist-status {
   font-family: var(--font-mono); font-size: 10px; text-transform: capitalize;
   color: var(--muted); border: 1px solid var(--rule); border-radius: 10px; padding: 2px 8px;
+}
+.oe-hist-mod {
+  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
 }
 
 /* Current items list */

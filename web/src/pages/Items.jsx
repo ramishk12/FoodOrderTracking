@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
+import CustomerOrderHistory from '../components/CustomerOrderHistory';
 import '../index.css';
 
 /* ─── Constants ──────────────────────────── */
@@ -18,38 +19,6 @@ function fmtUsd(n) {
     style: 'currency', currency: 'USD',
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(n ?? 0);
-}
-
-function fmtDate(iso) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-}
-
-function groupOrderItems(orderItems) {
-  const groups = [];
-  const seen = new Map();
-
-  for (const oi of orderItems) {
-    const modKey = (oi.modifiers || [])
-      .map((m) => m.modifier_id ?? m.modifier_name)
-      .sort()
-      .join(',');
-    const key = `${oi.item_id}::${modKey}`;
-
-    if (seen.has(key)) {
-      groups[seen.get(key)].quantity += oi.quantity;
-    } else {
-      seen.set(key, groups.length);
-      groups.push({
-        item_id: oi.item_id,
-        item_name: oi.item_name,
-        quantity: oi.quantity,
-        modifiers: oi.modifiers || [],
-      });
-    }
-  }
-  return groups;
 }
 
 function localDatetimeToUtcIso(localStr) {
@@ -235,8 +204,6 @@ export default function Items() {
   const [orderForm, setOrderForm]           = useState(EMPTY_ORDER_FORM);
   const [orderFormError, setOrderFormError] = useState(null);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
-  const [orderHistory, setOrderHistory]     = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [search, setSearch]             = useState('');
   const [catFilter, setCatFilter]       = useState('');
@@ -668,46 +635,11 @@ export default function Items() {
 
                 {/* Customer order history */}
                 {orderForm.customer_id && (
-                  <div className="ord-history">
-                    <div className="ord-history-title">Order history</div>
-                    {historyLoading
-                      ? <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
-                          Loading…
-                        </div>
-                      : orderHistory.length === 0
-                        ? <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--rule)', fontStyle: 'italic' }}>
-                            No previous orders
-                          </div>
-                        : orderHistory.map((order) => (
-                            <div key={order.id} className="ord-hist-row">
-                              <div className="ord-hist-top">
-                                <span className="ord-hist-id">#{order.id}</span>
-                                <span className="ord-hist-date">{fmtDate(order.created_at)}</span>
-                              </div>
-                              <div className="ord-hist-items">
-                                {order.order_items?.length > 0 ? (
-                                  <div>
-                                    {groupOrderItems(order.order_items).sort((a, b) => (a.item_name || '').localeCompare(b.item_name || '')).map((i, idx) => (
-                                      <div key={idx}>
-                                        {i.quantity}× {i.item_name}
-                                        {i.modifiers?.length > 0 && (
-                                          <span className="ord-hist-mod">
-                                            {' '}({i.modifiers.map((m) => m.modifier_name).join(', ')})
-                                          </span>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : 'No items'}
-                              </div>
-                              <div className="ord-hist-footer">
-                                <span className="ord-hist-total">{fmtUsd(order.total_amount)}</span>
-                                <span className="ord-hist-status">{order.status}</span>
-                              </div>
-                            </div>
-                          ))
-                    }
-                  </div>
+                  <CustomerOrderHistory 
+                    customerId={parseInt(orderForm.customer_id)} 
+                    variant="ord"
+                    showTitle={true}
+                  />
                 )}
               </div>
             </div>
