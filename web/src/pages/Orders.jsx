@@ -126,17 +126,17 @@ function OrderCard({ order, onStatusChange, onDelete, delay }) {
           </div>
         ) : null)}
  
-        {/* Items — group identical item+modifier combos onto one line */}
+        {/* Items — sort by item name and group by item+modifiers */}
         {order.order_items?.length > 0 && (
           <div className="ord-detail" style={{ alignItems: 'flex-start' }}>
             <span className="ord-detail-label">Items</span>
             <div className="ord-items">
-              {groupOrderItems(order.order_items).map((line, i) => (
+              {groupOrderItems(order.order_items).sort((a, b) => (a.item_name || '').localeCompare(b.item_name || '')).map((line, i) => (
                 <div key={i} className="ord-item-row">
                   <span className="ord-item-qty">{line.quantity}×</span>
                   <div className="ord-item-body">
                     <span className="ord-item-name">{line.item_name}</span>
-                    {line.modifiers.length > 0 && (
+                    {line.modifiers?.length > 0 && (
                       <span className="ord-item-mods">
                         {line.modifiers.map((m) => m.modifier_name).join(', ')}
                       </span>

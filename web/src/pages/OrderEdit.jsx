@@ -33,6 +33,32 @@ function localInputToUtcIso(local) {
   return new Date(local).toISOString();
 }
 
+function groupOrderItems(orderItems) {
+  const groups = [];
+  const seen = new Map();
+
+  for (const oi of orderItems) {
+    const modKey = (oi.modifiers || [])
+      .map((m) => m.modifier_id ?? m.modifier_name)
+      .sort()
+      .join(',');
+    const key = `${oi.item_id}::${modKey}`;
+
+    if (seen.has(key)) {
+      groups[seen.get(key)].quantity += oi.quantity;
+    } else {
+      seen.set(key, groups.length);
+      groups.push({
+        item_id: oi.item_id,
+        item_name: oi.item_name,
+        quantity: oi.quantity,
+        modifiers: oi.modifiers || [],
+      });
+    }
+  }
+  return groups;
+}
+
 /* ─── OrderEdit ──────────────────────────── */
 
 export default function OrderEdit() {
@@ -379,8 +405,15 @@ export default function OrderEdit() {
                         </div>
                         <div className="oe-hist-items">
                           {o.order_items?.length
-                            ? o.order_items.map((i) => (
-                                <div key={i.item_id ?? i.item_name}>{i.quantity}× {i.item_name}</div>
+                            ? groupOrderItems(o.order_items).sort((a, b) => (a.item_name || '').localeCompare(b.item_name || '')).map((i, idx) => (
+                                <div key={idx}>
+                                  {i.quantity}× {i.item_name}
+                                  {i.modifiers?.length > 0 && (
+                                    <span className="oe-hist-mod">
+                                      {' '}({i.modifiers.map((m) => m.modifier_name).join(', ')})
+                                    </span>
+                                  )}
+                                </div>
                               ))
                             : <div>No items</div>}
                         </div>

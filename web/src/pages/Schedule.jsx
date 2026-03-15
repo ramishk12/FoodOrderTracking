@@ -44,6 +44,32 @@ function dateStatus(scheduledDate) {
   return 'normal';
 }
 
+function groupOrderItems(orderItems) {
+  const groups = [];
+  const seen = new Map();
+
+  for (const oi of orderItems) {
+    const modKey = (oi.modifiers || [])
+      .map((m) => m.modifier_id ?? m.modifier_name)
+      .sort()
+      .join(',');
+    const key = `${oi.item_id}::${modKey}`;
+
+    if (seen.has(key)) {
+      groups[seen.get(key)].quantity += oi.quantity;
+    } else {
+      seen.set(key, groups.length);
+      groups.push({
+        item_id: oi.item_id,
+        item_name: oi.item_name,
+        quantity: oi.quantity,
+        modifiers: oi.modifiers || [],
+      });
+    }
+  }
+  return groups;
+}
+
 function formatTime(scheduledDate) {
   const date = new Date(scheduledDate);
   const diff = diffDays(scheduledDate);
@@ -111,9 +137,14 @@ function OrderCard({ order }) {
         <div className="sch-customer">{order.customer_name || 'No customer'}</div>
         <div className="sch-items-list">
           {order.order_items?.length
-            ? order.order_items.map((item) => (
-                <div key={item.id ?? item.item_name}>
+            ? groupOrderItems(order.order_items).sort((a, b) => (a.item_name || '').localeCompare(b.item_name || '')).map((item, idx) => (
+                <div key={idx}>
                   {item.quantity}× {item.item_name}
+                  {item.modifiers?.length > 0 && (
+                    <span className="sch-mod">
+                      {' '}({item.modifiers.map((m) => m.modifier_name).join(', ')})
+                    </span>
+                  )}
                 </div>
               ))
             : <div>No items</div>}

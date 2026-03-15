@@ -26,6 +26,32 @@ function fmtDate(iso) {
   });
 }
 
+function groupOrderItems(orderItems) {
+  const groups = [];
+  const seen = new Map();
+
+  for (const oi of orderItems) {
+    const modKey = (oi.modifiers || [])
+      .map((m) => m.modifier_id ?? m.modifier_name)
+      .sort()
+      .join(',');
+    const key = `${oi.item_id}::${modKey}`;
+
+    if (seen.has(key)) {
+      groups[seen.get(key)].quantity += oi.quantity;
+    } else {
+      seen.set(key, groups.length);
+      groups.push({
+        item_id: oi.item_id,
+        item_name: oi.item_name,
+        quantity: oi.quantity,
+        modifiers: oi.modifiers || [],
+      });
+    }
+  }
+  return groups;
+}
+
 function localDatetimeToUtcIso(localStr) {
   if (!localStr) return null;
   const d = new Date(localStr);
@@ -661,8 +687,15 @@ export default function Items() {
                               <div className="ord-hist-items">
                                 {order.order_items?.length > 0 ? (
                                   <div>
-                                    {order.order_items.map((i) => (
-                                      <div key={i.item_id}>{i.quantity}× {i.item_name}</div>
+                                    {groupOrderItems(order.order_items).sort((a, b) => (a.item_name || '').localeCompare(b.item_name || '')).map((i, idx) => (
+                                      <div key={idx}>
+                                        {i.quantity}× {i.item_name}
+                                        {i.modifiers?.length > 0 && (
+                                          <span className="ord-hist-mod">
+                                            {' '}({i.modifiers.map((m) => m.modifier_name).join(', ')})
+                                          </span>
+                                        )}
+                                      </div>
                                     ))}
                                   </div>
                                 ) : 'No items'}
