@@ -162,8 +162,6 @@ export default function OrderEdit() {
       ...p, customer_id: customerId,
       delivery_address: customer?.address || p.delivery_address,
     }));
-    setOrderHistory([]); setHistoryVisible(false);
-    if (customerId) fetchHistory(parseInt(customerId), parseInt(id));
   };
 
   /* ── New customer ── */
