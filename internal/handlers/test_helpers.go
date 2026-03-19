@@ -12,9 +12,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func init() {
+	gin.SetMode(gin.ReleaseMode)
+}
+
 // TestMain is the entry point for all handler tests.
 func TestMain(m *testing.M) {
-	gin.SetMode(gin.TestMode)
 	os.Exit(m.Run())
 }
 
