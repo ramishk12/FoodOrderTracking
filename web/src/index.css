@@ -2098,7 +2098,7 @@ body {
   justify-content: space-between;
   padding-bottom: 20px;
   border-bottom: 2px solid var(--espresso);
-  margin-bottom: 28px;
+  margin-bottom: 32px;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -4003,4 +4003,13 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   color: rgba(245,240,232,0.75);
+}
+
+/* ── White box behind search bar + item grid ── */
+.itm-menu-box {
+  background: white;
+  border: 1.5px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
 }
