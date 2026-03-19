@@ -43,6 +43,7 @@ function Navbar() {
             key={path}
             to={path}
             className={`nav-link${isActive(path) ? ' active' : ''}`}
+            onClick={isActive(path) ? () => window.location.reload() : undefined}
           >
             {label}
           </Link>
