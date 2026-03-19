@@ -13,6 +13,7 @@ const fmt = {
     style: 'currency', currency: 'USD', maximumFractionDigits: 0,
   }).format(n ?? 0),
   num: (n) => new Intl.NumberFormat('en-US').format(Math.round(n ?? 0)),
+  pct: (n) => `${(n ?? 0).toFixed(1)}%`,
   date: (s) => new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
   time: (d) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
 };
@@ -81,13 +82,10 @@ function TrendChart({ data, mode }) {
 
   const vals = data.map((d) => Number(mode === 'revenue' ? d.revenue : d.orders) || 0);
   const rawMax = Math.max(...vals.map(v => Number(v) || 0), 0);
-  // Compute a "nice" ceiling that guarantees all three ticks (0, 50%, 100%) are distinct.
-  // When rawMax is 0 or very small, fall back to a minimum scale of 2 so ticks are 0 / 1 / 2.
   const niceMax = (() => {
     if (rawMax <= 0) return 2;
     const mag = Math.pow(10, Math.floor(Math.log10(rawMax)));
     const ceil = Math.ceil(rawMax / mag) * mag;
-    // ceil can equal rawMax when rawMax is an exact power of 10; bump it up one step
     return Math.max(ceil, rawMax + mag);
   })();
   const maxV = niceMax;
@@ -100,7 +98,6 @@ function TrendChart({ data, mode }) {
     v: vals[i],
   }));
 
-  // Smooth bezier path
   const bezierPath = pts.reduce((acc, p, i) => {
     if (i === 0) return `M ${p.x},${p.y}`;
     const prev = pts[i - 1];
@@ -134,7 +131,6 @@ function TrendChart({ data, mode }) {
           </clipPath>
         </defs>
 
-        {/* Y grid + labels */}
         {yTicks.map((tk, i) => (
           <g key={i}>
             <line x1={PAD.l} y1={tk.y} x2={PAD.l + iW} y2={tk.y}
@@ -146,10 +142,7 @@ function TrendChart({ data, mode }) {
           </g>
         ))}
 
-        {/* Area */}
         <path d={areaPath} fill="url(#area-grad)" clipPath="url(#chart-clip)" />
-
-        {/* Line */}
         <path
           d={bezierPath}
           fill="none"
@@ -164,7 +157,6 @@ function TrendChart({ data, mode }) {
           }}
         />
 
-        {/* X labels */}
         {pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map((p, i) => (
           <text key={i} x={p.x} y={H - 4} textAnchor="middle"
             fill="#8a7060" fontSize="9.5" fontFamily="'IBM Plex Mono', monospace">
@@ -172,7 +164,6 @@ function TrendChart({ data, mode }) {
           </text>
         ))}
 
-        {/* Hover zones */}
         {pts.map((p, i) => (
           <rect key={i}
             x={p.x - iW / data.length / 2} y={PAD.t}
@@ -182,7 +173,6 @@ function TrendChart({ data, mode }) {
           />
         ))}
 
-        {/* Hover indicator */}
         {hovPt && (
           <g>
             <line x1={hovPt.x} y1={PAD.t} x2={hovPt.x} y2={PAD.t + iH}
@@ -193,7 +183,6 @@ function TrendChart({ data, mode }) {
         )}
       </svg>
 
-      {/* Floating tooltip */}
       {hovPt && (() => {
         const leftPct = ((hovPt.x - PAD.l) / iW) * 100;
         return (
@@ -317,6 +306,84 @@ function TopCustomers({ customers }) {
   );
 }
 
+/* ─── ModifierPopularity ─────────────────────── */
+
+function ModifierPopularity({ data }) {
+  const [openItems, setOpenItems] = useState({});
+
+  if (!data?.length) return <div className="db-empty">No modifier data yet</div>;
+
+  const toggle = (itemName) =>
+    setOpenItems((p) => ({ ...p, [itemName]: !p[itemName] }));
+
+  return (
+    <div className="mod-pop-list">
+      {/* Column header */}
+      <div className="mod-pop-header">
+        <span className="mod-pop-col-modifier">Modifier</span>
+        <span className="mod-pop-col-price">Price adj.</span>
+        <span className="mod-pop-col-count">Times ordered</span>
+        <span className="mod-pop-col-pct">% of orders</span>
+        <span className="mod-pop-col-rev">Revenue</span>
+        <span className="mod-pop-col-cust">Top customer</span>
+      </div>
+
+      {data.map((itemGroup) => {
+        const isOpen = openItems[itemGroup.item_name] ?? true; // default open
+        const totalRev = itemGroup.modifiers.reduce((s, m) => s + (m.revenue ?? 0), 0);
+        return (
+          <div key={itemGroup.item_name} className="mod-pop-item">
+            {/* Accordion row for the item */}
+            <button
+              type="button"
+              className="mod-pop-item-head"
+              onClick={() => toggle(itemGroup.item_name)}
+            >
+              <span className="mod-pop-chevron">{isOpen ? '▾' : '▸'}</span>
+              <span className="mod-pop-item-name">{itemGroup.item_name}</span>
+              <span className="mod-pop-item-meta">
+                {itemGroup.modifiers.length} modifier{itemGroup.modifiers.length !== 1 ? 's' : ''}
+                &nbsp;·&nbsp;
+                {itemGroup.total_item_orders} order{itemGroup.total_item_orders !== 1 ? 's' : ''}
+                &nbsp;·&nbsp;
+                {fmt.usd0(totalRev)} modifier revenue
+              </span>
+            </button>
+
+            {/* Modifier rows */}
+            {isOpen && (
+              <div className="mod-pop-rows">
+                {itemGroup.modifiers.map((mod, i) => (
+                  <div key={mod.modifier_name} className="mod-pop-row" style={{ animationDelay: `${i * 30}ms` }}>
+                    <span className="mod-pop-col-modifier mod-pop-name">{mod.modifier_name}</span>
+                    <span className="mod-pop-col-price mod-pop-price">
+                      {mod.price_adjustment === 0
+                        ? <span className="mod-pop-free">free</span>
+                        : (mod.price_adjustment > 0 ? '+' : '') + fmt.usd(mod.price_adjustment)}
+                    </span>
+                    <span className="mod-pop-col-count mod-pop-count">{mod.times_ordered}</span>
+                    <span className="mod-pop-col-pct">
+                      <span className="mod-pop-pct-bar-wrap">
+                        <span
+                          className="mod-pop-pct-bar"
+                          style={{ width: `${Math.min(mod.pct_of_orders, 100)}%` }}
+                        />
+                      </span>
+                      <span className="mod-pop-pct-label">{fmt.pct(mod.pct_of_orders)}</span>
+                    </span>
+                    <span className="mod-pop-col-rev mod-pop-rev">{fmt.usd0(mod.revenue)}</span>
+                    <span className="mod-pop-col-cust mod-pop-cust">{mod.top_customer}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── Panel wrapper ──────────────────────────── */
 
 function Panel({ title, badge, action, children }) {
@@ -398,13 +465,13 @@ export default function Dashboard() {
 
               {/* KPI strip */}
               <div className="db-kpi">
-                <KpiCard label="Total Revenue"   value={s.total_revenue}      isCurrency delay={0}   />
-                <KpiCard label="Monthly Revenue" value={s.monthly_revenue}    isCurrency delay={60}  />
-                <KpiCard label="Daily Revenue"   value={s.daily_revenue}      isCurrency delay={120} accent />
+                <KpiCard label="Total Revenue"   value={s.total_revenue}       isCurrency delay={0}   />
+                <KpiCard label="Monthly Revenue" value={s.monthly_revenue}     isCurrency delay={60}  />
+                <KpiCard label="Daily Revenue"   value={s.daily_revenue}       isCurrency delay={120} accent />
                 <KpiCard label="Avg Order Value" value={s.average_order_value} isCurrency delay={180} />
-                <KpiCard label="Total Orders"    value={s.total_orders}       delay={240}
+                <KpiCard label="Total Orders"    value={s.total_orders}        delay={240}
                   sub={`${fmt.num(s.monthly_orders ?? 0)} this month`} />
-                <KpiCard label="Today's Orders"  value={s.daily_orders}       delay={300}
+                <KpiCard label="Today's Orders"  value={s.daily_orders}        delay={300}
                   sub={`${fmt.usd(s.daily_revenue)} revenue`} />
               </div>
 
@@ -440,6 +507,16 @@ export default function Dashboard() {
 
                 <Panel title="Top Customers" badge={s.top_customers?.length ?? 0}>
                   <TopCustomers customers={s.top_customers} />
+                </Panel>
+              </div>
+
+              {/* Modifier popularity — full width */}
+              <div className="db-full">
+                <Panel
+                  title="Modifier Popularity"
+                  badge={s.modifier_popularity?.length ?? 0}
+                >
+                  <ModifierPopularity data={s.modifier_popularity} />
                 </Panel>
               </div>
             </>
