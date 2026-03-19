@@ -10,7 +10,8 @@ const EMPTY_ORDER_FORM = {
   customer_id: '', delivery_address: '', notes: '',
   payment_method: 'cash', scheduled_date: '',
 };
-const EMPTY_MOD_FORM = { name: '', price_adjustment: '0' };
+const EMPTY_MOD_FORM  = { name: '', price_adjustment: '0' };
+const EMPTY_CUST      = { name: '', phone: '', email: '', address: '' };
 
 /* ─── Helpers ────────────────────────────── */
 
@@ -216,6 +217,11 @@ export default function Items() {
   const [orderFormError, setOrderFormError]   = useState(null);
   const [orderSubmitting, setOrderSubmitting] = useState(false);
 
+  const [showNewCust, setShowNewCust] = useState(false);
+  const [custForm, setCustForm]       = useState(EMPTY_CUST);
+  const [custSaving, setCustSaving]   = useState(false);
+  const [custError, setCustError]     = useState(null);
+
   const [search, setSearch]             = useState('');
   const [catFilter, setCatFilter]       = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -404,6 +410,32 @@ export default function Items() {
     setOrderFormError(null);
     setOrderLines([]);
     setOpenModPicker(null);
+    setShowNewCust(false);
+    setCustForm(EMPTY_CUST);
+    setCustError(null);
+  };
+
+  const custField = (key) => ({
+    value:     custForm[key],
+    onChange:  (e) => setCustForm((p) => ({ ...p, [key]: e.target.value })),
+    className: 'oe-input',
+  });
+
+  const handleNewCustomer = async (e) => {
+    e.preventDefault();
+    setCustSaving(true); setCustError(null);
+    try {
+      const newCust = await api.createCustomer(custForm);
+      const updated = await api.getCustomers();
+      setCustomers(updated || []);
+      setShowNewCust(false);
+      setCustForm(EMPTY_CUST);
+      if (newCust?.id != null) handleCustomerChange(String(newCust.id));
+    } catch (err) {
+      setCustError(err.message);
+    } finally {
+      setCustSaving(false);
+    }
   };
 
   const handleCustomerChange = (customerId) => {
@@ -621,15 +653,56 @@ export default function Items() {
                   </div>
                   <div className="oe-section-body">
 
-                    <div className="oe-field">
-                      <label className="oe-label">Customer</label>
-                      <select className="oe-select" value={orderForm.customer_id}
-                        onChange={(e) => handleCustomerChange(e.target.value)}>
-                        <option value="">No customer</option>
-                        {customers.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                    <div className="oe-customer-row">
+                      <div className="oe-field">
+                        <label className="oe-label">Customer</label>
+                        <select className="oe-select" value={orderForm.customer_id}
+                          onChange={(e) => handleCustomerChange(e.target.value)}>
+                          <option value="">No customer</option>
+                          {customers.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button type="button" className="btn-text"
+                        onClick={() => { setShowNewCust((o) => !o); setCustError(null); }}>
+                        {showNewCust ? '✕ cancel' : '+ new'}
+                      </button>
+                    </div>
+
+                    {/* Inline new customer */}
+                    <div className={`oe-new-cust-wrap ${showNewCust ? 'open' : 'closed'}`}>
+                      <form className="oe-new-cust" onSubmit={handleNewCustomer}>
+                        <div className="oe-new-cust-title">New customer</div>
+                        {custError && <div className="oe-error-banner" style={{ margin: 0 }}>{custError}</div>}
+                        <div className="oe-new-cust-grid">
+                          <div className="oe-field full">
+                            <label className="oe-label">Name *</label>
+                            <input {...custField('name')} placeholder="Full name" required />
+                          </div>
+                          <div className="oe-field">
+                            <label className="oe-label">Phone</label>
+                            <input {...custField('phone')} placeholder="604-555-0100" />
+                          </div>
+                          <div className="oe-field">
+                            <label className="oe-label">Email</label>
+                            <input {...custField('email')} type="email" placeholder="name@example.com" />
+                          </div>
+                          <div className="oe-field full">
+                            <label className="oe-label">Address</label>
+                            <input {...custField('address')} placeholder="Delivery address" />
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button type="submit" className="btn-primary" disabled={custSaving}>
+                            {custSaving ? 'Adding…' : 'Add customer'}
+                          </button>
+                          <button type="button" className="btn-ghost"
+                            onClick={() => { setShowNewCust(false); setCustError(null); }}>
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
                     </div>
 
                     <CustomerOrderHistory
