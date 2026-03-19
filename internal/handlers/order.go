@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -14,6 +15,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func intSliceToAny(s []int) []any {
+	r := make([]any, len(s))
+	for i, v := range s {
+		r[i] = v
+	}
+	return r
+}
 
 // validStatuses is the single source of truth for allowed order statuses.
 var validStatuses = map[string]bool{
@@ -101,13 +110,14 @@ func populateOrderItems(orders []models.Order) error {
 
 	// Build a map of order_item_id -> *OrderItem so we can attach modifiers.
 	oiMap := make(map[int]*models.OrderItem)
-	var oiIDs []any
+	var oiIDs []int
 	for _, orderPtr := range orderMap {
 		for j := range orderPtr.OrderItems {
 			oiMap[orderPtr.OrderItems[j].ID] = &orderPtr.OrderItems[j]
 			oiIDs = append(oiIDs, orderPtr.OrderItems[j].ID)
 		}
 	}
+	sort.Ints(oiIDs)
 
 	if len(oiIDs) > 0 {
 		ph := ""
@@ -122,7 +132,7 @@ func populateOrderItems(orders []models.Order) error {
 			FROM order_item_modifiers
 			WHERE order_item_id IN (%s)
 			ORDER BY id
-		`, ph), oiIDs...)
+		`, ph), intSliceToAny(oiIDs)...)
 		if err != nil {
 			log.Printf("Error querying order item modifiers: %v", err)
 			return nil
