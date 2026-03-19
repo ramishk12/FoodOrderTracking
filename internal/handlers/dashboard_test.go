@@ -15,34 +15,32 @@ import (
 // ── Query regex constants ────────────────────────────────────────────────────
 
 const (
-	totalRevenueQueryRegex       = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled'`
-	periodRevenueQueryRegex      = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled' AND created_at >=`
-	statusCountQueryRegex        = `SELECT status, COUNT\(\*\) FROM orders`
-	bestSellingQueryRegex        = `SELECT i\.name, SUM\(oi\.quantity\)`
-	topCustomersQueryRegex       = `SELECT COALESCE\(c\.name, 'Unknown'\)`
-	salesTrendQueryRegex         = `SELECT DATE\(created_at AT TIME ZONE 'UTC'\)`
-	modifierPopularityQueryRegex = `WITH modifier_counts AS`
+	totalRevenueQueryRegex  = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled'`
+	periodRevenueQueryRegex = `SELECT COALESCE\(SUM\(total_amount\), 0\), COUNT\(\*\) FROM orders WHERE status != 'cancelled' AND created_at >=`
+	statusCountQueryRegex   = `SELECT status, COUNT\(\*\) FROM orders`
+	bestSellingQueryRegex   = `SELECT i\.name, SUM\(oi\.quantity\)`
+	topCustomersQueryRegex  = `SELECT COALESCE\(c\.name, 'Unknown'\)`
+	salesTrendQueryRegex    = `SELECT DATE\(created_at AT TIME ZONE 'UTC'\)`
 )
 
 // ── Shared column slices ─────────────────────────────────────────────────────
 
 var (
-	revenueCountCols       = []string{"coalesce", "count"}
-	statusCols             = []string{"status", "count"}
-	bestSellingCols        = []string{"name", "total_qty", "total_revenue"}
-	topCustomerCols        = []string{"coalesce", "count", "sum"}
-	salesTrendCols         = []string{"day", "orders", "revenue"}
-	modifierPopularityCols = []string{
-		"item_id", "item_name", "modifier_name", "price_adjustment",
-		"times_ordered", "pct_of_orders", "revenue",
-		"total_item_orders", "top_customer",
-	}
+	revenueCountCols = []string{"coalesce", "count"}
+	statusCols       = []string{"status", "count"}
+	bestSellingCols  = []string{"name", "total_qty", "total_revenue"}
+	topCustomerCols  = []string{"coalesce", "count", "sum"}
+	salesTrendCols   = []string{"day", "orders", "revenue"}
 )
 
 // ── Mock helpers ─────────────────────────────────────────────────────────────
 
 // mockRevenueSummary sets up the three revenue/count queries (total, monthly, daily).
+// Pass UTC-based time values to match the refactored dashboard.go.
 func mockRevenueSummary(m sqlmock.Sqlmock, total, monthly, daily float64, totalOrders, monthlyOrders, dailyOrders int) {
+	// Use AnyArg for the time boundaries — the handler computes its own time.Now()
+	// when the request fires, so asserting exact values here causes a time-drift race
+	// where setup time != request time, especially around midnight.
 	m.ExpectQuery(totalRevenueQueryRegex).
 		WillReturnRows(sqlmock.NewRows(revenueCountCols).AddRow(total, totalOrders))
 	m.ExpectQuery(periodRevenueQueryRegex).
@@ -69,6 +67,8 @@ func mockTopCustomers(m sqlmock.Sqlmock, rows *sqlmock.Rows) {
 }
 
 // mockSalesTrend sets up the single GROUP BY sales trend query.
+// The refactored code fires one query (not 30), returning aggregated rows.
+// AnyArg is used for the since timestamp to avoid time-drift races.
 func mockSalesTrend(m sqlmock.Sqlmock, rows *sqlmock.Rows) {
 	m.ExpectQuery(salesTrendQueryRegex).WithArgs(sqlmock.AnyArg()).WillReturnRows(rows)
 }
@@ -76,16 +76,6 @@ func mockSalesTrend(m sqlmock.Sqlmock, rows *sqlmock.Rows) {
 // mockEmptySalesTrend sets up the sales trend query returning no rows.
 func mockEmptySalesTrend(m sqlmock.Sqlmock) {
 	mockSalesTrend(m, sqlmock.NewRows(salesTrendCols))
-}
-
-// mockModifierPopularity sets up the modifier popularity CTE query.
-func mockModifierPopularity(m sqlmock.Sqlmock, rows *sqlmock.Rows) {
-	m.ExpectQuery(modifierPopularityQueryRegex).WillReturnRows(rows)
-}
-
-// mockEmptyModifierPopularity sets up the modifier popularity query returning no rows.
-func mockEmptyModifierPopularity(m sqlmock.Sqlmock) {
-	mockModifierPopularity(m, sqlmock.NewRows(modifierPopularityCols))
 }
 
 // mockFullDashboard sets up all queries for a standard successful response.
@@ -106,6 +96,9 @@ func mockFullDashboard(m sqlmock.Sqlmock) {
 		AddRow("John Doe", 5, 500.00).
 		AddRow("Jane Smith", 3, 300.00))
 
+	// Build trend rows using the same now reference to avoid a time-drift race.
+	// The mock returns one row per day; the handler zero-fills any missing days.
+	// We use AnyArg on the query arg (the since timestamp) for the same reason.
 	trendNow := time.Now().UTC()
 	trendRows := sqlmock.NewRows(salesTrendCols)
 	for i := salesTrendDays - 1; i >= 0; i-- {
@@ -113,11 +106,6 @@ func mockFullDashboard(m sqlmock.Sqlmock) {
 		trendRows.AddRow(date, 1, 50.00)
 	}
 	mockSalesTrend(m, trendRows)
-
-	mockModifierPopularity(m, sqlmock.NewRows(modifierPopularityCols).
-		AddRow(1, "Pizza", "Extra Cheese", 1.50, 30, 60.0, 45.00, 50, "John Doe").
-		AddRow(1, "Pizza", "Mushrooms", 0.75, 15, 30.0, 11.25, 50, "Jane Smith").
-		AddRow(2, "Burger", "Bacon", 2.00, 20, 66.7, 40.00, 30, "John Doe"))
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -142,12 +130,11 @@ func TestGetDashboardStats(t *testing.T) {
 				assert.Equal(t, 5, stats.MonthlyOrders)
 				assert.Equal(t, 100.00, stats.DailyRevenue)
 				assert.Equal(t, 2, stats.DailyOrders)
-				assert.Equal(t, 1500.00/10, stats.AverageOrderValue)
+				assert.Equal(t, 1500.00/10, stats.AverageOrderValue) // TotalRevenue / TotalOrders
 				assert.Len(t, stats.OrdersByStatus, 4)
 				assert.Len(t, stats.BestSellingItems, 2)
 				assert.Len(t, stats.TopCustomers, 2)
 				assert.Len(t, stats.SalesTrend, salesTrendDays)
-				assert.Len(t, stats.ModifierPopularity, 2)
 			},
 		},
 		{
@@ -158,7 +145,6 @@ func TestGetDashboardStats(t *testing.T) {
 				mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
 				mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
 				mockEmptySalesTrend(m)
-				mockEmptyModifierPopularity(m)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
@@ -170,8 +156,8 @@ func TestGetDashboardStats(t *testing.T) {
 				assert.Empty(t, stats.OrdersByStatus)
 				assert.Empty(t, stats.BestSellingItems)
 				assert.Empty(t, stats.TopCustomers)
+				// SalesTrend still has salesTrendDays entries — all zeros
 				assert.Len(t, stats.SalesTrend, salesTrendDays)
-				assert.Empty(t, stats.ModifierPopularity)
 			},
 		},
 		{
@@ -186,24 +172,27 @@ func TestGetDashboardStats(t *testing.T) {
 			name: "Partial data returned when supplementary queries fail",
 			setupMock: func(m sqlmock.Sqlmock) {
 				mockRevenueSummary(m, 500.00, 100.00, 50.00, 5, 2, 1)
+				// Status, items, customers, trend queries all fail —
+				// dashboard still returns 200 with revenue data populated.
 				m.ExpectQuery(statusCountQueryRegex).WillReturnError(fmt.Errorf("db error"))
 				m.ExpectQuery(bestSellingQueryRegex).WillReturnError(fmt.Errorf("db error"))
 				m.ExpectQuery(topCustomersQueryRegex).WillReturnError(fmt.Errorf("db error"))
 				m.ExpectQuery(salesTrendQueryRegex).WithArgs(sqlmock.AnyArg()).WillReturnError(fmt.Errorf("db error"))
-				m.ExpectQuery(modifierPopularityQueryRegex).WillReturnError(fmt.Errorf("db error"))
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var stats DashboardStats
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
+				// Revenue data is present
 				assert.Equal(t, 500.00, stats.TotalRevenue)
 				assert.Equal(t, 5, stats.TotalOrders)
+				// Supplementary data is empty but not an error
 				assert.Empty(t, stats.OrdersByStatus)
 				assert.Empty(t, stats.BestSellingItems)
 				assert.Empty(t, stats.TopCustomers)
 				assert.Empty(t, stats.SalesTrend)
-				assert.Empty(t, stats.ModifierPopularity)
-				assert.Len(t, stats.Warnings, 5)
+				// Each failed supplementary query should produce a warning entry
+				assert.Len(t, stats.Warnings, 4)
 			},
 		},
 		{
@@ -214,12 +203,12 @@ func TestGetDashboardStats(t *testing.T) {
 				mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
 				mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
 				mockEmptySalesTrend(m)
-				mockEmptyModifierPopularity(m)
 			},
 			expectedStatus: http.StatusOK,
 			checkResponse: func(t *testing.T, w *httptest.ResponseRecorder) {
 				var stats DashboardStats
 				assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
+				// Guard against divide-by-zero
 				assert.Equal(t, 0.00, stats.AverageOrderValue)
 			},
 		},
@@ -250,7 +239,6 @@ func TestDashboardBestSellingItems(t *testing.T) {
 			AddRow("Caesar Salad", 15, 150.00))
 		mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
 		mockEmptySalesTrend(m)
-		mockEmptyModifierPopularity(m)
 
 		w := runDashboardRequest(t)
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -279,7 +267,6 @@ func TestDashboardTopCustomers(t *testing.T) {
 			AddRow("David Brown", 2, 200.00).
 			AddRow("Eve Davis", 1, 100.00))
 		mockEmptySalesTrend(m)
-		mockEmptyModifierPopularity(m)
 
 		w := runDashboardRequest(t)
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -304,12 +291,12 @@ func TestDashboardSalesTrend(t *testing.T) {
 			mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
 			mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
 
+			// Return data for only a subset of days — the rest should be zero-filled.
 			now := time.Now().UTC()
 			trendRows := sqlmock.NewRows(salesTrendCols).
 				AddRow(now.AddDate(0, 0, -1).Format("2006-01-02"), 3, 150.00).
 				AddRow(now.Format("2006-01-02"), 5, 250.00)
 			mockSalesTrend(m, trendRows)
-			mockEmptyModifierPopularity(m)
 
 			w := runDashboardRequest(t)
 			assert.Equal(t, http.StatusOK, w.Code)
@@ -318,6 +305,7 @@ func TestDashboardSalesTrend(t *testing.T) {
 			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
 			assert.Len(t, stats.SalesTrend, salesTrendDays)
 
+			// Last two days should have data; the rest should be zeros.
 			last := stats.SalesTrend[salesTrendDays-1]
 			assert.Equal(t, now.Format("2006-01-02"), last.Date)
 			assert.Equal(t, 5, last.Orders)
@@ -326,6 +314,11 @@ func TestDashboardSalesTrend(t *testing.T) {
 			secondLast := stats.SalesTrend[salesTrendDays-2]
 			assert.Equal(t, 3, secondLast.Orders)
 
+			// A day with no orders should be zero-filled, not absent.
+			// The mock provides data for only the last 2 days (indices salesTrendDays-1 and
+			// salesTrendDays-2). Any earlier index is guaranteed to be empty regardless of
+			// salesTrendDays, so we use salesTrendDays-3 rather than 0 to stay robust if
+			// salesTrendDays is ever reduced to a small value.
 			emptyDay := stats.SalesTrend[salesTrendDays-3]
 			assert.Equal(t, 0, emptyDay.Orders)
 			assert.Equal(t, 0.00, emptyDay.Revenue)
@@ -341,7 +334,6 @@ func TestDashboardSalesTrend(t *testing.T) {
 			mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
 			mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
 			mockEmptySalesTrend(m)
-			mockEmptyModifierPopularity(m)
 
 			w := runDashboardRequest(t)
 			assert.Equal(t, http.StatusOK, w.Code)
@@ -363,12 +355,13 @@ func TestDashboardSalesTrend(t *testing.T) {
 
 func TestDashboardExcludesCancelledOrders(t *testing.T) {
 	withMockDB(t, func(m sqlmock.Sqlmock) {
+		// Mock returns only non-cancelled counts — verifies the SQL WHERE clause
+		// is respected by checking the response reflects those values exactly.
 		mockRevenueSummary(m, 100.00, 100.00, 100.00, 2, 2, 2)
 		mockStatusCounts(m, sqlmock.NewRows(statusCols).AddRow("delivered", 2))
 		mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
 		mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
 		mockEmptySalesTrend(m)
-		mockEmptyModifierPopularity(m)
 
 		w := runDashboardRequest(t)
 		assert.Equal(t, http.StatusOK, w.Code)
@@ -380,115 +373,5 @@ func TestDashboardExcludesCancelledOrders(t *testing.T) {
 		assert.Equal(t, map[string]int{"delivered": 2}, stats.OrdersByStatus)
 
 		assert.NoError(t, m.ExpectationsWereMet())
-	})
-}
-
-func TestDashboardModifierPopularity(t *testing.T) {
-	t.Run("Groups modifiers correctly by item", func(t *testing.T) {
-		withMockDB(t, func(m sqlmock.Sqlmock) {
-			mockRevenueSummary(m, 1000.00, 500.00, 100.00, 10, 5, 1)
-			mockStatusCounts(m, sqlmock.NewRows(statusCols).AddRow("delivered", 10))
-			mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
-			mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
-			mockEmptySalesTrend(m)
-			mockModifierPopularity(m, sqlmock.NewRows(modifierPopularityCols).
-				AddRow(1, "Pizza", "Extra Cheese", 1.50, 30, 60.0, 45.00, 50, "John Doe").
-				AddRow(1, "Pizza", "Mushrooms", 0.75, 15, 30.0, 11.25, 50, "Jane Smith").
-				AddRow(2, "Burger", "Bacon", 2.00, 20, 66.7, 40.00, 30, "John Doe"))
-
-			w := runDashboardRequest(t)
-			assert.Equal(t, http.StatusOK, w.Code)
-
-			var stats DashboardStats
-			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
-			assert.Len(t, stats.ModifierPopularity, 2)
-
-			pizza := stats.ModifierPopularity[0]
-			assert.Equal(t, "Pizza", pizza.ItemName)
-			assert.Equal(t, 50, pizza.TotalItemOrders)
-			assert.Len(t, pizza.Modifiers, 2)
-			assert.Equal(t, "Extra Cheese", pizza.Modifiers[0].ModifierName)
-			assert.Equal(t, 30, pizza.Modifiers[0].TimesOrdered)
-			assert.Equal(t, 60.0, pizza.Modifiers[0].PctOfOrders)
-			assert.Equal(t, 45.00, pizza.Modifiers[0].Revenue)
-			assert.Equal(t, "John Doe", pizza.Modifiers[0].TopCustomer)
-			assert.Equal(t, "Mushrooms", pizza.Modifiers[1].ModifierName)
-
-			burger := stats.ModifierPopularity[1]
-			assert.Equal(t, "Burger", burger.ItemName)
-			assert.Len(t, burger.Modifiers, 1)
-			assert.Equal(t, "Bacon", burger.Modifiers[0].ModifierName)
-			assert.Equal(t, 2.00, burger.Modifiers[0].PriceAdjustment)
-
-			assert.NoError(t, m.ExpectationsWereMet())
-		})
-	})
-
-	t.Run("Empty when no modifiers have been ordered", func(t *testing.T) {
-		withMockDB(t, func(m sqlmock.Sqlmock) {
-			mockRevenueSummary(m, 0, 0, 0, 0, 0, 0)
-			mockStatusCounts(m, sqlmock.NewRows(statusCols))
-			mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
-			mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
-			mockEmptySalesTrend(m)
-			mockEmptyModifierPopularity(m)
-
-			w := runDashboardRequest(t)
-			assert.Equal(t, http.StatusOK, w.Code)
-
-			var stats DashboardStats
-			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
-			assert.Empty(t, stats.ModifierPopularity)
-
-			assert.NoError(t, m.ExpectationsWereMet())
-		})
-	})
-
-	t.Run("Modifiers within item are ordered by times_ordered descending", func(t *testing.T) {
-		withMockDB(t, func(m sqlmock.Sqlmock) {
-			mockRevenueSummary(m, 0, 0, 0, 0, 0, 0)
-			mockStatusCounts(m, sqlmock.NewRows(statusCols))
-			mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
-			mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
-			mockEmptySalesTrend(m)
-			// DB returns rows already sorted by times_ordered DESC (enforced by ORDER BY in SQL).
-			mockModifierPopularity(m, sqlmock.NewRows(modifierPopularityCols).
-				AddRow(1, "Pizza", "Extra Cheese", 1.50, 40, 80.0, 60.00, 50, "Alice").
-				AddRow(1, "Pizza", "Peppers", 0.00, 10, 20.0, 0.00, 50, "Bob"))
-
-			w := runDashboardRequest(t)
-			assert.Equal(t, http.StatusOK, w.Code)
-
-			var stats DashboardStats
-			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
-			assert.Len(t, stats.ModifierPopularity, 1)
-			mods := stats.ModifierPopularity[0].Modifiers
-			assert.Equal(t, "Extra Cheese", mods[0].ModifierName)
-			assert.Equal(t, "Peppers", mods[1].ModifierName)
-			assert.True(t, mods[0].TimesOrdered >= mods[1].TimesOrdered)
-
-			assert.NoError(t, m.ExpectationsWereMet())
-		})
-	})
-
-	t.Run("Produces a warning when modifier popularity query fails", func(t *testing.T) {
-		withMockDB(t, func(m sqlmock.Sqlmock) {
-			mockRevenueSummary(m, 100.00, 100.00, 100.00, 2, 2, 1)
-			mockStatusCounts(m, sqlmock.NewRows(statusCols).AddRow("delivered", 2))
-			mockBestSelling(m, sqlmock.NewRows(bestSellingCols))
-			mockTopCustomers(m, sqlmock.NewRows(topCustomerCols))
-			mockEmptySalesTrend(m)
-			m.ExpectQuery(modifierPopularityQueryRegex).WillReturnError(fmt.Errorf("db error"))
-
-			w := runDashboardRequest(t)
-			assert.Equal(t, http.StatusOK, w.Code)
-
-			var stats DashboardStats
-			assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &stats))
-			assert.Empty(t, stats.ModifierPopularity)
-			assert.Contains(t, stats.Warnings, "modifier popularity unavailable")
-
-			assert.NoError(t, m.ExpectationsWereMet())
-		})
 	})
 }

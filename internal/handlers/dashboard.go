@@ -18,19 +18,18 @@ const (
 
 // DashboardStats is the top-level response for the dashboard endpoint.
 type DashboardStats struct {
-	TotalRevenue       float64             `json:"total_revenue"`
-	MonthlyRevenue     float64             `json:"monthly_revenue"`
-	DailyRevenue       float64             `json:"daily_revenue"`
-	TotalOrders        int                 `json:"total_orders"`
-	MonthlyOrders      int                 `json:"monthly_orders"`
-	DailyOrders        int                 `json:"daily_orders"`
-	AverageOrderValue  float64             `json:"average_order_value"`
-	OrdersByStatus     map[string]int      `json:"orders_by_status"`
-	BestSellingItems   []BestSellingItem   `json:"best_selling_items"`
-	TopCustomers       []TopCustomer       `json:"top_customers"`
-	SalesTrend         []SalesDataPoint    `json:"sales_trend"`
-	ModifierPopularity []ItemModifierStats `json:"modifier_popularity"`
-	Warnings           []string            `json:"warnings,omitempty"`
+	TotalRevenue      float64           `json:"total_revenue"`
+	MonthlyRevenue    float64           `json:"monthly_revenue"`
+	DailyRevenue      float64           `json:"daily_revenue"`
+	TotalOrders       int               `json:"total_orders"`
+	MonthlyOrders     int               `json:"monthly_orders"`
+	DailyOrders       int               `json:"daily_orders"`
+	AverageOrderValue float64           `json:"average_order_value"`
+	OrdersByStatus    map[string]int    `json:"orders_by_status"`
+	BestSellingItems  []BestSellingItem `json:"best_selling_items"`
+	TopCustomers      []TopCustomer     `json:"top_customers"`
+	SalesTrend        []SalesDataPoint  `json:"sales_trend"`
+	Warnings          []string          `json:"warnings,omitempty"`
 }
 
 // BestSellingItem holds aggregated sales data for a single menu item.
@@ -52,23 +51,6 @@ type SalesDataPoint struct {
 	Date    string  `json:"date"`
 	Orders  int     `json:"orders"`
 	Revenue float64 `json:"revenue"`
-}
-
-// ModifierStat holds analytics for a single (item, modifier) combination.
-type ModifierStat struct {
-	ModifierName    string  `json:"modifier_name"`
-	PriceAdjustment float64 `json:"price_adjustment"`
-	TimesOrdered    int     `json:"times_ordered"`
-	PctOfOrders     float64 `json:"pct_of_orders"`
-	Revenue         float64 `json:"revenue"`
-	TopCustomer     string  `json:"top_customer"`
-}
-
-// ItemModifierStats groups all modifier stats under one item.
-type ItemModifierStats struct {
-	ItemName        string         `json:"item_name"`
-	TotalItemOrders int            `json:"total_item_orders"`
-	Modifiers       []ModifierStat `json:"modifiers"`
 }
 
 // fetchRevenueSummary populates total, monthly, and daily revenue/order counts
@@ -232,130 +214,6 @@ func fetchSalesTrend(stats *DashboardStats, since, now time.Time) error {
 	return nil
 }
 
-// fetchModifierPopularity populates ModifierPopularity with per-item modifier
-// analytics: times ordered, % of that item's orders, revenue contribution, and
-// the customer who has ordered that (item, modifier) combo most often.
-// Only modifiers that appear in at least one non-cancelled order are included.
-func fetchModifierPopularity(stats *DashboardStats) error {
-	rows, err := database.DB.Query(`
-		WITH modifier_counts AS (
-			SELECT
-				i.id                                              AS item_id,
-				i.name                                            AS item_name,
-				oim.modifier_name,
-				oim.price_adjustment,
-				COUNT(*)                                          AS times_ordered,
-				COALESCE(SUM(oim.price_adjustment * oi.quantity), 0) AS revenue
-			FROM order_item_modifiers oim
-			JOIN order_items oi ON oim.order_item_id = oi.id
-			JOIN orders o       ON oi.order_id = o.id
-			JOIN items i        ON oi.item_id  = i.id
-			WHERE o.status != 'cancelled'
-			GROUP BY i.id, i.name, oim.modifier_name, oim.price_adjustment
-		),
-		item_order_counts AS (
-			SELECT
-				oi.item_id,
-				COUNT(DISTINCT oi.order_id) AS total_orders
-			FROM order_items oi
-			JOIN orders o ON oi.order_id = o.id
-			WHERE o.status != 'cancelled'
-			GROUP BY oi.item_id
-		),
-		top_customers AS (
-			SELECT DISTINCT ON (oi.item_id, oim.modifier_name)
-				oi.item_id,
-				oim.modifier_name,
-				COALESCE(c.name, 'Unknown') AS customer_name
-			FROM order_item_modifiers oim
-			JOIN order_items oi  ON oim.order_item_id = oi.id
-			JOIN orders o        ON oi.order_id = o.id
-			LEFT JOIN customers c ON o.customer_id = c.id
-			WHERE o.status != 'cancelled'
-			GROUP BY oi.item_id, oim.modifier_name, o.customer_id, c.name
-			ORDER BY oi.item_id, oim.modifier_name, COUNT(*) DESC
-		)
-		SELECT
-			mc.item_id,
-			mc.item_name,
-			mc.modifier_name,
-			mc.price_adjustment,
-			mc.times_ordered,
-			CASE WHEN ioc.total_orders > 0
-				THEN ROUND((mc.times_ordered::numeric / ioc.total_orders) * 100, 1)
-				ELSE 0
-			END                              AS pct_of_orders,
-			mc.revenue,
-			ioc.total_orders,
-			COALESCE(tc.customer_name, 'Unknown') AS top_customer
-		FROM modifier_counts mc
-		JOIN  item_order_counts ioc ON mc.item_id = ioc.item_id
-		LEFT JOIN top_customers tc  ON mc.item_id = tc.item_id
-		                           AND mc.modifier_name = tc.modifier_name
-		ORDER BY mc.item_name ASC, mc.times_ordered DESC
-	`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	// Group rows by item, preserving the ORDER BY item_name order.
-	type itemKey struct {
-		id   int
-		name string
-	}
-	var order []itemKey
-	groups := make(map[int]*ItemModifierStats)
-
-	for rows.Next() {
-		var (
-			itemID          int
-			itemName        string
-			modifierName    string
-			priceAdj        float64
-			timesOrdered    int
-			pctOfOrders     float64
-			revenue         float64
-			totalItemOrders int
-			topCustomer     string
-		)
-		if err := rows.Scan(
-			&itemID, &itemName, &modifierName, &priceAdj,
-			&timesOrdered, &pctOfOrders, &revenue,
-			&totalItemOrders, &topCustomer,
-		); err != nil {
-			log.Printf("Error scanning modifier popularity row: %v", err)
-			continue
-		}
-
-		if _, exists := groups[itemID]; !exists {
-			groups[itemID] = &ItemModifierStats{
-				ItemName:        itemName,
-				TotalItemOrders: totalItemOrders,
-				Modifiers:       make([]ModifierStat, 0),
-			}
-			order = append(order, itemKey{id: itemID, name: itemName})
-		}
-
-		groups[itemID].Modifiers = append(groups[itemID].Modifiers, ModifierStat{
-			ModifierName:    modifierName,
-			PriceAdjustment: priceAdj,
-			TimesOrdered:    timesOrdered,
-			PctOfOrders:     pctOfOrders,
-			Revenue:         revenue,
-			TopCustomer:     topCustomer,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	for _, k := range order {
-		stats.ModifierPopularity = append(stats.ModifierPopularity, *groups[k.id])
-	}
-	return nil
-}
-
 // GetDashboardStats returns aggregated statistics for the dashboard page.
 func GetDashboardStats(c *gin.Context) {
 	now := time.Now().UTC()
@@ -364,11 +222,10 @@ func GetDashboardStats(c *gin.Context) {
 	salesTrendSince := now.AddDate(0, 0, -(salesTrendDays - 1))
 
 	stats := DashboardStats{
-		OrdersByStatus:     make(map[string]int),
-		BestSellingItems:   make([]BestSellingItem, 0),
-		TopCustomers:       make([]TopCustomer, 0),
-		SalesTrend:         make([]SalesDataPoint, 0),
-		ModifierPopularity: make([]ItemModifierStats, 0),
+		OrdersByStatus:   make(map[string]int),
+		BestSellingItems: make([]BestSellingItem, 0),
+		TopCustomers:     make([]TopCustomer, 0),
+		SalesTrend:       make([]SalesDataPoint, 0),
 	}
 
 	if err := fetchRevenueSummary(&stats, startOfMonth, startOfDay); err != nil {
@@ -390,10 +247,6 @@ func GetDashboardStats(c *gin.Context) {
 	if err := fetchSalesTrend(&stats, salesTrendSince, now); err != nil {
 		log.Printf("Error fetching sales trend: %v", err)
 		stats.Warnings = append(stats.Warnings, "sales trend unavailable")
-	}
-	if err := fetchModifierPopularity(&stats); err != nil {
-		log.Printf("Error fetching modifier popularity: %v", err)
-		stats.Warnings = append(stats.Warnings, "modifier popularity unavailable")
 	}
 
 	c.JSON(http.StatusOK, stats)
