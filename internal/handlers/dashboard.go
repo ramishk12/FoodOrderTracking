@@ -256,7 +256,7 @@ func fetchModifierPopularity(stats *DashboardStats) error {
 		item_order_counts AS (
 			SELECT
 				oi.item_id,
-				COUNT(DISTINCT oi.order_id) AS total_orders
+				SUM(oi.quantity) AS total_sold
 			FROM order_items oi
 			JOIN orders o ON oi.order_id = o.id
 			WHERE o.status != 'cancelled'
@@ -281,12 +281,12 @@ func fetchModifierPopularity(stats *DashboardStats) error {
 			mc.modifier_name,
 			mc.price_adjustment,
 			mc.times_ordered,
-			CASE WHEN ioc.total_orders > 0
-				THEN ROUND((mc.times_ordered::numeric / ioc.total_orders) * 100, 1)
+			CASE WHEN ioc.total_sold > 0
+				THEN ROUND((mc.times_ordered::numeric / ioc.total_sold) * 100, 1)
 				ELSE 0
 			END                              AS pct_of_orders,
 			mc.revenue,
-			ioc.total_orders,
+			ioc.total_sold,
 			COALESCE(tc.customer_name, 'Unknown') AS top_customer
 		FROM modifier_counts mc
 		JOIN  item_order_counts ioc ON mc.item_id = ioc.item_id
