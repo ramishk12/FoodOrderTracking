@@ -51,7 +51,7 @@ export default function OrderEdit() {
   // Item-specific modifiers come from item.modifiers (loaded with items list).
   const [lineItems, setLineItems] = useState([]);
 																					   
-  const [openModPicker, setOpenModPicker] = useState(null); // lineId with picker open
+  const [openModPickers, setOpenModPickers] = useState({}); // lineId -> boolean
 
   const [showNewCust, setShowNewCust] = useState(false);
   const [custForm, setCustForm]       = useState(EMPTY_CUST);
@@ -122,7 +122,11 @@ export default function OrderEdit() {
 
   const removeLine = (lineId) => {
     setLineItems((p) => p.filter((l) => l.lineId !== lineId));
-    if (openModPicker === lineId) setOpenModPicker(null);
+    setOpenModPickers((p) => {
+      const next = { ...p };
+      delete next[lineId];
+      return next;
+    });
   };
 
   const toggleModifier = (lineId, mod) => {
@@ -409,7 +413,7 @@ export default function OrderEdit() {
                       const item = line.item;
                       const modAdj = line.modifiers.reduce((s, m) => s + (m.price_adjustment || 0), 0);
                       const lineTotal = (item.price + modAdj) * line.quantity;
-                      const isPickerOpen = openModPicker === line.lineId;
+                      const isPickerOpen = !!openModPickers[line.lineId];
                       return (
                         <div key={line.lineId} className="oe-item-row">
                           <div className="oe-item-row-main">
@@ -425,10 +429,12 @@ export default function OrderEdit() {
                                 onClick={() => setLineQty(line.lineId, line.quantity + 1)}>+</button>
                             </div>
                             <span className="oe-item-sub">{fmtUsd(lineTotal)}</span>
-                            <button type="button" className="oe-mod-toggle"
-                              onClick={() => setOpenModPicker(isPickerOpen ? null : line.lineId)}>
-                              {isPickerOpen ? 'Hide mods' : `Mods${line.modifiers.length > 0 ? ` (${line.modifiers.length})` : ''}`}
-                            </button>
+                            {item.modifiers?.length > 0 && (
+                              <button type="button" className="oe-mod-toggle"
+                                onClick={() => setOpenModPickers((p) => ({ ...p, [line.lineId]: !p[line.lineId] }))}>
+                                {isPickerOpen ? 'Hide mods' : `Mods${line.modifiers.length > 0 ? ` (${line.modifiers.length})` : ''}`}
+                              </button>
+                            )}
                             <button type="button" className="oe-remove-line"
                               onClick={() => removeLine(line.lineId)} title="Remove line">✕</button>
                           </div>
